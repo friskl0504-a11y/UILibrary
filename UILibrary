@@ -36,8 +36,9 @@ local Player = {
 }
 
 --// Device flags
-local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local IsTablet = UserInputService.TouchEnabled
+local IsTouchDevice = UserInputService.TouchEnabled
+local IsMobile = IsTouchDevice
+local IsTablet = IsTouchDevice and UserInputService.KeyboardEnabled
 
 --// Dynamic metrics
 local Camera = workspace.CurrentCamera
@@ -58,27 +59,31 @@ local Setup = {
     IsLandscape = false,
     ScreenScale = 1,
 
-    TouchTargetMin = 44,
+    TouchTargetMin = 48,
     FontSize = 14,
-    TweenSpeed = IsMobile and 0.25 or 0.2,
+    TweenSpeed = IsMobile and 0.24 or 0.2,
     PaddingX = 10,
     PaddingY = 8,
-    MaxNotifications = IsMobile and 2 or 5,
+    MaxNotifications = IsMobile and 3 or 5,
 }
 
+local function GetViewportSize()
+    return (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Metrics.ScreenSize
+end
+
 local function RecomputeMetrics()
-    Metrics.ScreenSize = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Metrics.ScreenSize
+    Metrics.ScreenSize = GetViewportSize()
     Metrics.IsLandscape = Metrics.ScreenSize.X > Metrics.ScreenSize.Y
     Metrics.IsCompact = Metrics.ScreenSize.X <= 360
     Metrics.ScreenScale = math.clamp(Metrics.ScreenSize.X / 375, 0.85, 1.35)
-    Metrics.SafeAreaInset = IsMobile and (Metrics.IsCompact and 10 or 12) or 0
+    Metrics.SafeAreaInset = IsTouchDevice and (Metrics.IsCompact and 10 or 12) or 0
 
     Setup.IsLandscape = Metrics.IsLandscape
     Setup.ScreenScale = Metrics.ScreenScale
-    Setup.TouchTargetMin = IsMobile and math.clamp(math.floor(46 * Metrics.ScreenScale), 44, 58) or 32
-    Setup.FontSize = IsMobile and math.clamp(14 + (Metrics.ScreenScale * 1.2), 14, 17) or 13
-    Setup.PaddingX = IsMobile and math.clamp(math.floor(10 * Metrics.ScreenScale), 8, 16) or 10
-    Setup.PaddingY = IsMobile and math.clamp(math.floor(8 * Metrics.ScreenScale), 6, 14) or 8
+    Setup.TouchTargetMin = IsTouchDevice and math.clamp(math.floor(48 * Metrics.ScreenScale), 44, 60) or 32
+    Setup.FontSize = IsTouchDevice and math.clamp(math.floor(14 + (Metrics.ScreenScale * 1.1)), 14, 17) or 13
+    Setup.PaddingX = IsTouchDevice and math.clamp(math.floor(10 * Metrics.ScreenScale), 8, 16) or 10
+    Setup.PaddingY = IsTouchDevice and math.clamp(math.floor(8 * Metrics.ScreenScale), 6, 14) or 8
 end
 
 RecomputeMetrics()
@@ -91,29 +96,29 @@ end
 
 --// Dark opaque theme
 local Theme = {
-    Primary       = Color3.fromRGB(8, 10, 14),
-    Secondary     = Color3.fromRGB(12, 15, 22),
-    Component     = Color3.fromRGB(18, 22, 31),
-    Interactables = Color3.fromRGB(26, 31, 44),
+    Primary       = Color3.fromRGB(10, 12, 16),
+    Secondary     = Color3.fromRGB(14, 18, 24),
+    Component     = Color3.fromRGB(20, 25, 34),
+    Interactables = Color3.fromRGB(28, 34, 46),
 
-    Accent        = Color3.fromRGB(98, 118, 245),
-    AccentDark    = Color3.fromRGB(70, 88, 205),
-    AccentGlow    = Color3.fromRGB(140, 158, 255),
+    Accent        = Color3.fromRGB(92, 112, 248),
+    AccentDark    = Color3.fromRGB(62, 82, 205),
+    AccentGlow    = Color3.fromRGB(156, 173, 255),
 
     Success       = Color3.fromRGB(84, 200, 148),
     Warning       = Color3.fromRGB(255, 184, 80),
     Error         = Color3.fromRGB(255, 96, 116),
 
-    Tab           = Color3.fromRGB(150, 160, 186),
-    Title         = Color3.fromRGB(230, 236, 255),
-    Description   = Color3.fromRGB(138, 150, 182),
-    Muted         = Color3.fromRGB(96, 108, 138),
+    Tab           = Color3.fromRGB(156, 166, 190),
+    Title         = Color3.fromRGB(234, 239, 255),
+    Description   = Color3.fromRGB(144, 156, 186),
+    Muted         = Color3.fromRGB(100, 112, 140),
 
     Shadow        = Color3.fromRGB(0, 0, 0),
-    Outline       = Color3.fromRGB(44, 54, 82),
+    Outline       = Color3.fromRGB(40, 50, 76),
     OutlineActive = Color3.fromRGB(92, 112, 226),
 
-    Icon          = Color3.fromRGB(184, 198, 232),
+    Icon          = Color3.fromRGB(190, 202, 236),
 }
 
 --// Runtime vars
@@ -210,14 +215,14 @@ local function Drag(Canvas)
     end
 
     local function ClampToScreen()
-        local vp = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Metrics.ScreenSize
+        local vp = GetViewportSize()
         local abs = Canvas.AbsolutePosition
         local sz = Canvas.AbsoluteSize
 
         local minX = Metrics.SafeAreaInset
-        local maxX = vp.X - sz.X - Metrics.SafeAreaInset
+        local maxX = math.max(minX, vp.X - sz.X - Metrics.SafeAreaInset)
         local minY = Metrics.SafeAreaInset
-        local maxY = vp.Y - sz.Y - Metrics.SafeAreaInset
+        local maxY = math.max(minY, vp.Y - sz.Y - Metrics.SafeAreaInset)
 
         local px = math.clamp(abs.X, minX, maxX)
         local py = math.clamp(abs.Y, minY, maxY)
@@ -324,6 +329,7 @@ local function Resizeable(Tab, Minimum, Maximum)
     end)
 end
 
+
 --// Screen asset
 local Screen
 if (identifyexecutor) then
@@ -344,7 +350,7 @@ end)
 
 --// Mobile floating toggle
 local function CreateMobileToggle(ScreenGui, OnToggle)
-    if not IsMobile or not ScreenGui then return nil end
+    if not IsTouchDevice or not ScreenGui then return nil end
 
     local Existing = ScreenGui:FindFirstChild("MobileToggle")
     if Existing then Existing:Destroy() end
@@ -352,13 +358,13 @@ local function CreateMobileToggle(ScreenGui, OnToggle)
     local Btn = Instance.new("TextButton")
     Btn.Name = "MobileToggle"
     Btn.Parent = ScreenGui
-    Btn.Size = UDim2.fromOffset(56, 56)
+    Btn.Size = UDim2.fromOffset(math.clamp(math.floor(58 * Metrics.ScreenScale), 54, 64), math.clamp(math.floor(58 * Metrics.ScreenScale), 54, 64))
     Btn.AnchorPoint = Vector2.new(1, 1)
-    Btn.Position = UDim2.new(1, -14, 1, -(24 + Metrics.SafeAreaInset))
-    Btn.BackgroundColor3 = Theme.Accent
-    Btn.Text = "UI"
-    Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Btn.TextSize = 16
+    Btn.Position = UDim2.new(1, -(14 + Metrics.SafeAreaInset), 1, -(18 + Metrics.SafeAreaInset))
+    Btn.BackgroundColor3 = Theme.Component
+    Btn.Text = "≡"
+    Btn.TextColor3 = Theme.Title
+    Btn.TextSize = 18
     Btn.Font = Enum.Font.GothamBold
     Btn.AutoButtonColor = false
     Btn.ZIndex = 999999
@@ -371,7 +377,7 @@ local function CreateMobileToggle(ScreenGui, OnToggle)
     local Stroke = Instance.new("UIStroke")
     Stroke.Color = Theme.Outline
     Stroke.Thickness = 1.2
-    Stroke.Transparency = 0.2
+    Stroke.Transparency = 0.12
     Stroke.Parent = Btn
 
     local dragging = false
@@ -412,7 +418,7 @@ local function CreateMobileToggle(ScreenGui, OnToggle)
                 Tween(Btn, 0.08, { BackgroundColor3 = Theme.AccentGlow })
                 task.delay(0.08, function()
                     if Btn and Btn.Parent then
-                        Tween(Btn, 0.15, { BackgroundColor3 = Theme.Accent })
+                        Tween(Btn, 0.15, { BackgroundColor3 = Theme.Component })
                     end
                 end)
                 OnToggle()
@@ -422,6 +428,7 @@ local function CreateMobileToggle(ScreenGui, OnToggle)
 
     return Btn
 end
+
 
 --// Data tables
 local Animations = {}
@@ -530,22 +537,23 @@ function Library:CreateWindow(Settings)
     local MobileToggleButton
 
     local function ApplyMobileLayout()
-        if not IsMobile or not Window or not Window.Parent then return end
+        if not IsTouchDevice or not Window or not Window.Parent then return end
         RecomputeMetrics()
 
-        if Settings.MobileFullscreen == true then
-            Window.Size = UDim2.new(1, -Metrics.SafeAreaInset * 2, 1, -Metrics.SafeAreaInset * 2)
+        local inset = Metrics.SafeAreaInset
+        if Settings.MobileFullscreen == true or Metrics.ScreenSize.X <= 430 then
+            Window.Size = UDim2.new(1, -(inset * 2), 1, -(inset * 2))
         else
-            local w = Metrics.IsLandscape and (Metrics.IsCompact and 0.80 or 0.74) or 0.92
-            local h = Metrics.IsLandscape and 0.88 or (Metrics.IsCompact and 0.74 or 0.80)
+            local w = Metrics.IsLandscape and (Metrics.IsCompact and 0.82 or 0.76) or 0.94
+            local h = Metrics.IsLandscape and 0.88 or (Metrics.IsCompact and 0.78 or 0.84)
             Window.Size = Settings.Size or UDim2.fromScale(w, h)
         end
 
         Window.AnchorPoint = Vector2.new(0.5, 0.5)
-        Window.Position = UDim2.fromScale(0.5, 0.53)
+        Window.Position = UDim2.fromScale(0.5, Metrics.IsLandscape and 0.50 or 0.53)
     end
 
-    if IsMobile then
+    if IsTouchDevice then
         Settings.Size = nil
         ApplyMobileLayout()
     end
@@ -579,14 +587,14 @@ function Library:CreateWindow(Settings)
             Opened = false
             Animations:Close(Window)
             Window.Visible = false
-            if MobileToggleButton then MobileToggleButton.Text = "UI" end
+            if MobileToggleButton then MobileToggleButton.Text = "≡" end
         else
             Animations:Open(Window, 0)
             Opened = true
             if BlurEnabled and Blurs[Settings.Title] then
                 Blurs[Settings.Title].root.Parent = workspace.CurrentCamera
             end
-            if MobileToggleButton then MobileToggleButton.Text = "X" end
+            if MobileToggleButton then MobileToggleButton.Text = "×" end
         end
     end
 
@@ -618,7 +626,7 @@ function Library:CreateWindow(Settings)
                     if Blurs[Settings.Title] then
                         Blurs[Settings.Title].root.Parent = nil
                     end
-                    if MobileToggleButton then MobileToggleButton.Text = "UI" end
+                    if MobileToggleButton then MobileToggleButton.Text = "≡" end
                 end
             end)
         end
@@ -887,17 +895,26 @@ function Library:CreateWindow(Settings)
         if TextBox then TextBox.TextSize = Setup.FontSize end
 
         local Stroke = Input:FindFirstChildOfClass("UIStroke")
+
+        local function ShiftForKeyboard(Active)
+            if not IsTouchDevice then return end
+            local y = Active and (Metrics.IsLandscape and 0.46 or 0.43) or (Metrics.IsLandscape and 0.50 or 0.53)
+            Tween(Window, 0.16, { Position = UDim2.fromScale(0.5, y) })
+        end
+
         if TextBox then
             Connect(TextBox.Focused, function()
                 if Stroke then
                     Tween(Stroke, 0.12, { Color = Theme.Accent, Thickness = 1.5 })
                 end
+                ShiftForKeyboard(true)
             end)
 
             Connect(TextBox.FocusLost, function()
                 if Stroke then
                     Tween(Stroke, 0.16, { Color = Theme.Outline, Thickness = 1 })
                 end
+                ShiftForKeyboard(false)
                 if Info.Callback then Info.Callback(TextBox.Text) end
             end)
         end
@@ -1060,11 +1077,11 @@ function Library:CreateWindow(Settings)
             local Buttons = Example.Top and Example.Top:FindFirstChild("Buttons")
             if not Buttons then return end
 
-            if IsMobile then
-                local sheetHeight = Metrics.IsCompact and 0.72 or 0.66
+            if IsTouchDevice then
+                local sheetHeight = Metrics.IsCompact and 0.76 or 0.70
                 Example.AnchorPoint = Vector2.new(0.5, 1)
                 Example.Position = UDim2.new(0.5, 0, 1, 50)
-                Example.Size = UDim2.new(1, -Metrics.SafeAreaInset * 2, sheetHeight, 0)
+                Example.Size = UDim2.new(1, -(Metrics.SafeAreaInset * 2), sheetHeight, 0)
             else
                 Example.Position = UDim2.fromScale(0.5, 0.5)
                 Example.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1074,13 +1091,13 @@ function Library:CreateWindow(Settings)
             SetProperty(Example, { Parent = Window })
             Animations:Open(Example, 0, true)
 
-            if IsMobile then
-                Tween(Example, 0.22, { Position = UDim2.new(0.5, 0, 1, -Metrics.SafeAreaInset) })
+            if IsTouchDevice then
+                Tween(Example, 0.22, { Position = UDim2.new(0.5, 0, 1, -(Metrics.SafeAreaInset + 6)) })
             end
 
             local function CloseDropdown()
                 Tween(BG, 0.16, { BackgroundTransparency = 1 })
-                if IsMobile then
+                if IsTouchDevice then
                     Tween(Example, 0.16, { Position = UDim2.new(0.5, 0, 1, 50) })
                     task.wait(0.18)
                 else
@@ -1176,8 +1193,8 @@ function Library:CreateWindow(Settings)
         local Fill = Slide.Highlight
         local Circle = Fill.Circle
 
-        local trackHeight = IsMobile and (6 + Setup.ScreenScale) or 4
-        local handleSize = IsMobile and (20 + Setup.ScreenScale) or 14
+        local trackHeight = IsTouchDevice and (6 + Setup.ScreenScale) or 4
+        local handleSize = IsTouchDevice and math.clamp(math.floor(22 * Setup.ScreenScale), 20, 26) or 14
 
         Slide.Size = UDim2.new(1, 0, 0, trackHeight)
         Circle.Size = UDim2.new(0, handleSize, 0, handleSize)
@@ -1188,6 +1205,7 @@ function Library:CreateWindow(Settings)
         local MinValue = Info.MinValue or 0
         local MaxValue = Info.MaxValue or 100
         local Active = false
+        local ActiveTouch = nil
         local Value = Info.DefaultValue or MinValue
         local LastUpdateTime = 0
         local UpdateThrottle = 0.016
@@ -1203,7 +1221,7 @@ function Library:CreateWindow(Settings)
 
         local function UpdateFromX(RawX)
             local now = tick()
-            if IsMobile and (now - LastUpdateTime < UpdateThrottle) then return end
+            if IsTouchDevice and (now - LastUpdateTime < UpdateThrottle) then return end
             LastUpdateTime = now
 
             local slidePos = Slide.AbsolutePosition.X
@@ -1232,33 +1250,36 @@ function Library:CreateWindow(Settings)
 
         Connect(Fire.MouseButton1Down, function()
             Active = true
-            repeat
-                task.wait()
-                UpdateFromX(Player.Mouse.X)
-            until not Active
+            ActiveTouch = nil
+            UpdateFromX(Player.Mouse.X)
         end)
 
         Connect(Fire.InputBegan, function(Input)
             if Input.UserInputType == Enum.UserInputType.Touch then
                 Active = true
-                Connect(Input.Changed, function()
-                    if Active then
-                        UpdateFromX(Input.Position.X)
-                    end
-                end)
+                ActiveTouch = Input
+                UpdateFromX(Input.Position.X)
+            elseif Input.UserInputType == Enum.UserInputType.MouseButton1 then
+                Active = true
+                ActiveTouch = nil
+                UpdateFromX(Player.Mouse.X)
+            end
+        end)
+
+        Connect(Services.Input.InputChanged, function(Input)
+            if not Active then return end
+
+            if Input.UserInputType == Enum.UserInputType.MouseMovement and not IsTouchDevice then
+                UpdateFromX(Player.Mouse.X)
+            elseif ActiveTouch and Input == ActiveTouch then
+                UpdateFromX(Input.Position.X)
             end
         end)
 
         Connect(Services.Input.InputEnded, function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1
-                or Input.UserInputType == Enum.UserInputType.Touch then
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input == ActiveTouch then
                 Active = false
-            end
-        end)
-
-        Connect(Services.Input.TouchMoved, function(touch)
-            if Active then
-                UpdateFromX(touch.Position.X)
+                ActiveTouch = nil
             end
         end)
 
@@ -1444,7 +1465,8 @@ function Library:CreateWindow(Settings)
 
         local Toggle = Screen:FindFirstChild("MobileToggle")
         if Toggle and Toggle:IsA("TextButton") then
-            Toggle.BackgroundColor3 = Theme.Accent
+            Toggle.BackgroundColor3 = Theme.Component
+            Toggle.TextColor3 = Theme.Title
             local s = Toggle:FindFirstChildOfClass("UIStroke")
             if s then s.Color = Theme.Outline end
         end
@@ -1517,7 +1539,7 @@ function Library:CreateWindow(Settings)
     if IsMobile then
         MobileToggleButton = CreateMobileToggle(Screen, Close)
         if MobileToggleButton then
-            MobileToggleButton.Text = Opened and "X" or "UI"
+            MobileToggleButton.Text = Opened and "×" or "≡"
         end
 
         if Camera then
