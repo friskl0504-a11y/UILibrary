@@ -1,12 +1,15 @@
 --[[
-    User Interface Library - Mobile Optimized Edition (Consolidated)
-    Redesigned: compact mobile window + floating mobile toggle + softer UI theme
+    User Interface Library - Mobile Dark Opaque Edition (Consolidated)
+    - Darker theme
+    - Fully opaque UI
+    - Mobile-first sizing
+    - Floating mobile toggle (tap/drag separated)
+    - Responsive metrics on viewport change
 ]]
 
 --// Connections
 local GetService = game.GetService
 local Connect = game.Loaded.Connect
-local Wait = game.Loaded.Wait
 local Clone = game.Clone
 local Destroy = game.Destroy
 
@@ -15,69 +18,16 @@ if (not game:IsLoaded()) then
     Loaded.Wait(Loaded)
 end
 
---// Mobile Detection & Screen Metrics
+--// Services
 local UserInputService = GetService(game, "UserInputService")
-local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local IsTablet = UserInputService.TouchEnabled
-local ScreenSize = workspace.CurrentCamera.ViewportSize
-local IsLandscape = ScreenSize.X > ScreenSize.Y
-local SafeAreaInset = IsMobile and 12 or 0
-local ScreenScale = ScreenSize.X / 375
+local Players = GetService(game, "Players")
+local LocalPlayer = Players.LocalPlayer
 
---// Responsive setup
-local Setup = {
-    Keybind        = Enum.KeyCode.LeftControl,
-    Transparency   = 0.0,
-    ThemeMode      = "Dark",
-    Size           = nil,
-    IsMobile       = IsMobile,
-    IsLandscape    = IsLandscape,
-    ScreenScale    = ScreenScale,
-
-    TouchTargetMin = IsMobile and math.clamp(math.floor(46 * ScreenScale), 44, 56) or 32,
-    FontSize       = IsMobile and math.clamp(14 + (ScreenScale * 1.2), 14, 16) or 13,
-    TweenSpeed     = IsMobile and 0.25 or 0.2,
-    PaddingX       = IsMobile and math.clamp(math.floor(10 * ScreenScale), 10, 16) or 10,
-    PaddingY       = IsMobile and math.clamp(math.floor(8 * ScreenScale), 8, 14) or 8,
-
-    MaxNotifications = IsMobile and 2 or 5,
-}
-
---// Theme — Soft Modern Dark (eye-comfort)
-local Theme = {
-    Primary       = Color3.fromRGB(14, 16, 22),
-    Secondary     = Color3.fromRGB(20, 23, 31),
-    Component     = Color3.fromRGB(28, 32, 42),
-    Interactables = Color3.fromRGB(36, 42, 56),
-
-    Accent        = Color3.fromRGB(114, 137, 255),
-    AccentDark    = Color3.fromRGB(85, 105, 214),
-    AccentGlow    = Color3.fromRGB(156, 173, 255),
-
-    Success       = Color3.fromRGB(94, 210, 157),
-    Warning       = Color3.fromRGB(255, 191, 92),
-    Error         = Color3.fromRGB(255, 107, 125),
-
-    Tab           = Color3.fromRGB(170, 178, 200),
-    Title         = Color3.fromRGB(236, 241, 255),
-    Description   = Color3.fromRGB(155, 166, 196),
-    Muted         = Color3.fromRGB(108, 118, 144),
-
-    Shadow        = Color3.fromRGB(0, 0, 0),
-    Outline       = Color3.fromRGB(56, 66, 92),
-    OutlineActive = Color3.fromRGB(102, 122, 230),
-
-    Icon          = Color3.fromRGB(198, 210, 238),
-}
-
---// Services & Helpers
-local Type, Blur = nil, nil
-local LocalPlayer = GetService(game, "Players").LocalPlayer
 local Services = {
     Insert = GetService(game, "InsertService"),
     Tween  = GetService(game, "TweenService"),
     Run    = GetService(game, "RunService"),
-    Input  = GetService(game, "UserInputService"),
+    Input  = UserInputService,
 }
 
 local Player = {
@@ -85,23 +35,104 @@ local Player = {
     GUI   = LocalPlayer.PlayerGui,
 }
 
+--// Device flags
+local IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local IsTablet = UserInputService.TouchEnabled
+
+--// Dynamic metrics
+local Camera = workspace.CurrentCamera
+local Metrics = {
+    ScreenSize = Camera and Camera.ViewportSize or Vector2.new(375, 812),
+    IsLandscape = false,
+    IsCompact = false,
+    ScreenScale = 1,
+    SafeAreaInset = 12,
+}
+
+local Setup = {
+    Keybind = Enum.KeyCode.LeftControl,
+    Transparency = 0, -- fully opaque
+    ThemeMode = "Dark",
+    Size = nil,
+    IsMobile = IsMobile,
+    IsLandscape = false,
+    ScreenScale = 1,
+
+    TouchTargetMin = 44,
+    FontSize = 14,
+    TweenSpeed = IsMobile and 0.25 or 0.2,
+    PaddingX = 10,
+    PaddingY = 8,
+    MaxNotifications = IsMobile and 2 or 5,
+}
+
+local function RecomputeMetrics()
+    Metrics.ScreenSize = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Metrics.ScreenSize
+    Metrics.IsLandscape = Metrics.ScreenSize.X > Metrics.ScreenSize.Y
+    Metrics.IsCompact = Metrics.ScreenSize.X <= 360
+    Metrics.ScreenScale = math.clamp(Metrics.ScreenSize.X / 375, 0.85, 1.35)
+    Metrics.SafeAreaInset = IsMobile and (Metrics.IsCompact and 10 or 12) or 0
+
+    Setup.IsLandscape = Metrics.IsLandscape
+    Setup.ScreenScale = Metrics.ScreenScale
+    Setup.TouchTargetMin = IsMobile and math.clamp(math.floor(46 * Metrics.ScreenScale), 44, 58) or 32
+    Setup.FontSize = IsMobile and math.clamp(14 + (Metrics.ScreenScale * 1.2), 14, 17) or 13
+    Setup.PaddingX = IsMobile and math.clamp(math.floor(10 * Metrics.ScreenScale), 8, 16) or 10
+    Setup.PaddingY = IsMobile and math.clamp(math.floor(8 * Metrics.ScreenScale), 6, 14) or 8
+end
+
+RecomputeMetrics()
+
+if Camera then
+    Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        RecomputeMetrics()
+    end)
+end
+
+--// Dark opaque theme
+local Theme = {
+    Primary       = Color3.fromRGB(8, 10, 14),
+    Secondary     = Color3.fromRGB(12, 15, 22),
+    Component     = Color3.fromRGB(18, 22, 31),
+    Interactables = Color3.fromRGB(26, 31, 44),
+
+    Accent        = Color3.fromRGB(98, 118, 245),
+    AccentDark    = Color3.fromRGB(70, 88, 205),
+    AccentGlow    = Color3.fromRGB(140, 158, 255),
+
+    Success       = Color3.fromRGB(84, 200, 148),
+    Warning       = Color3.fromRGB(255, 184, 80),
+    Error         = Color3.fromRGB(255, 96, 116),
+
+    Tab           = Color3.fromRGB(150, 160, 186),
+    Title         = Color3.fromRGB(230, 236, 255),
+    Description   = Color3.fromRGB(138, 150, 182),
+    Muted         = Color3.fromRGB(96, 108, 138),
+
+    Shadow        = Color3.fromRGB(0, 0, 0),
+    Outline       = Color3.fromRGB(44, 54, 82),
+    OutlineActive = Color3.fromRGB(92, 112, 226),
+
+    Icon          = Color3.fromRGB(184, 198, 232),
+}
+
+--// Runtime vars
+local Type, Blur = nil, nil
 local ActiveNotifications = {}
 
+--// Helpers
 local function Tween(Object, Speed, Properties, Info)
     if not Object or not Object.Parent then return end
     local Style, Direction
     if Info then
-        Style, Direction = Info["EasingStyle"], Info["EasingDirection"]
+        Style, Direction = Info.EasingStyle, Info.EasingDirection
     else
         Style, Direction = Enum.EasingStyle.Exponential, Enum.EasingDirection.Out
     end
-
     local AdjustedSpeed = IsMobile and (Speed * 1.1) or Speed
     local tw = Services.Tween:Create(Object, TweenInfo.new(AdjustedSpeed, Style, Direction), Properties)
-    if tw then
-        tw:Play()
-        return tw
-    end
+    if tw then tw:Play() end
+    return tw
 end
 
 local function TweenSpring(Object, Speed, Properties)
@@ -112,10 +143,8 @@ local function TweenSpring(Object, Speed, Properties)
         TweenInfo.new(AdjustedSpeed, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
         Properties
     )
-    if tw then
-        tw:Play()
-        return tw
-    end
+    if tw then tw:Play() end
+    return tw
 end
 
 local function SetProperty(Object, Properties)
@@ -163,12 +192,14 @@ end
 local function Drag(Canvas)
     if not Canvas then return end
     local Dragging, DragInput, Start, StartPos = false, nil, nil, nil
-    local LastDragTime, DragThrottle = 0, 0.016
+    local LastDragTime = 0
+    local DragThrottle = 0.016
 
     local function Update(inputPosition)
         local currentTime = tick()
         if currentTime - LastDragTime < DragThrottle then return end
         LastDragTime = currentTime
+
         local delta = inputPosition - Start
         Canvas.Position = UDim2.new(
             StartPos.X.Scale,
@@ -179,13 +210,15 @@ local function Drag(Canvas)
     end
 
     local function ClampToScreen()
-        local vp = workspace.CurrentCamera.ViewportSize
+        local vp = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Metrics.ScreenSize
         local abs = Canvas.AbsolutePosition
         local sz = Canvas.AbsoluteSize
-        local minX = SafeAreaInset
-        local maxX = vp.X - sz.X - SafeAreaInset
-        local minY = SafeAreaInset
-        local maxY = vp.Y - sz.Y - SafeAreaInset
+
+        local minX = Metrics.SafeAreaInset
+        local maxX = vp.X - sz.X - Metrics.SafeAreaInset
+        local minY = Metrics.SafeAreaInset
+        local maxY = vp.Y - sz.Y - Metrics.SafeAreaInset
+
         local px = math.clamp(abs.X, minX, maxX)
         local py = math.clamp(abs.Y, minY, maxY)
         Tween(Canvas, 0.15, { Position = UDim2.new(0, px, 0, py) })
@@ -198,6 +231,7 @@ local function Drag(Canvas)
             Dragging = true
             Start = Input.Position
             StartPos = Canvas.Position
+
             Connect(Input.Changed, function()
                 if Input.UserInputState == Enum.UserInputState.End then
                     Dragging = false
@@ -225,15 +259,17 @@ end
 --// Resize (desktop only)
 local Resizing = {
     TopLeft     = { X = Vector2.new(-1, 0), Y = Vector2.new(0, -1) },
-    TopRight    = { X = Vector2.new( 1, 0), Y = Vector2.new(0, -1) },
-    BottomLeft  = { X = Vector2.new(-1, 0), Y = Vector2.new(0,  1) },
-    BottomRight = { X = Vector2.new( 1, 0), Y = Vector2.new(0,  1) },
+    TopRight    = { X = Vector2.new(1, 0), Y = Vector2.new(0, -1) },
+    BottomLeft  = { X = Vector2.new(-1, 0), Y = Vector2.new(0, 1) },
+    BottomRight = { X = Vector2.new(1, 0), Y = Vector2.new(0, 1) },
 }
 
 local function Resizeable(Tab, Minimum, Maximum)
     if IsMobile then return end
+
     task.spawn(function()
         local MousePos, Size, UIPos = nil, nil, nil
+
         if Tab and Tab:FindFirstChild("Resize") then
             local Positions = Tab:FindFirstChild("Resize")
             for _, Types in next, Positions:GetChildren() do
@@ -257,7 +293,10 @@ local function Resizeable(Tab, Minimum, Maximum)
         local function Resize(Delta)
             if Type and MousePos and Size and UIPos and Tab:FindFirstChild("Resize")[Type.Name] == Type then
                 local Mode = Resizing[Type.Name]
-                local NewSize = Vector2.new(Size.X + Delta.X * Mode.X.X, Size.Y + Delta.Y * Mode.Y.Y)
+                local NewSize = Vector2.new(
+                    Size.X + Delta.X * Mode.X.X,
+                    Size.Y + Delta.Y * Mode.Y.Y
+                )
                 NewSize = Vector2.new(
                     math.clamp(NewSize.X, Minimum.X, Maximum.X),
                     math.clamp(NewSize.Y, Minimum.Y, Maximum.Y)
@@ -285,12 +324,13 @@ local function Resizeable(Tab, Minimum, Maximum)
     end)
 end
 
---// Setup [UI]
+--// Screen asset
+local Screen
 if (identifyexecutor) then
     Screen = Services.Insert:LoadLocalAsset("rbxassetid://18490507748")
     Blur = loadstring(game:HttpGet("https://raw.githubusercontent.com/lxte/lates-lib/main/Assets/Blur.lua"))()
 else
-    Screen = (script.Parent)
+    Screen = script.Parent
     Blur = require(script.Blur)
 end
 
@@ -312,9 +352,9 @@ local function CreateMobileToggle(ScreenGui, OnToggle)
     local Btn = Instance.new("TextButton")
     Btn.Name = "MobileToggle"
     Btn.Parent = ScreenGui
-    Btn.Size = UDim2.fromOffset(54, 54)
+    Btn.Size = UDim2.fromOffset(56, 56)
     Btn.AnchorPoint = Vector2.new(1, 1)
-    Btn.Position = UDim2.new(1, -14, 1, -24 - SafeAreaInset)
+    Btn.Position = UDim2.new(1, -14, 1, -(24 + Metrics.SafeAreaInset))
     Btn.BackgroundColor3 = Theme.Accent
     Btn.Text = "UI"
     Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -331,43 +371,53 @@ local function CreateMobileToggle(ScreenGui, OnToggle)
     local Stroke = Instance.new("UIStroke")
     Stroke.Color = Theme.Outline
     Stroke.Thickness = 1.2
-    Stroke.Transparency = 0.25
+    Stroke.Transparency = 0.2
     Stroke.Parent = Btn
 
-    local dragging, dragStart, startPos = false, nil, nil
+    local dragging = false
+    local startPos, startInputPos
+    local movedDistance = 0
+    local dragThreshold = 10
 
     Btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            dragStart = input.Position
+            movedDistance = 0
             startPos = Btn.Position
+            startInputPos = input.Position
         end
     end)
 
     Btn.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.Touch then
-            local delta = input.Position - dragStart
-            Btn.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
+            local delta = input.Position - startInputPos
+            movedDistance = math.max(movedDistance, delta.Magnitude)
+
+            local nx = startPos.X.Offset + delta.X
+            local ny = startPos.Y.Offset + delta.Y
+
+            local vp = Metrics.ScreenSize
+            local bw, bh = Btn.AbsoluteSize.X, Btn.AbsoluteSize.Y
+            nx = math.clamp(nx, -(vp.X - bw - 8), -8)
+            ny = math.clamp(ny, -(vp.Y - bh - 8), -(8 + Metrics.SafeAreaInset))
+
+            Btn.Position = UDim2.new(1, nx, 1, ny)
         end
     end)
 
     Services.Input.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.Touch and dragging then
             dragging = false
-        end
-    end)
-
-    Btn.Activated:Connect(function()
-        Tween(Btn, 0.08, { BackgroundColor3 = Theme.AccentGlow })
-        task.delay(0.08, function()
-            if Btn and Btn.Parent then
-                Tween(Btn, 0.15, { BackgroundColor3 = Theme.Accent })
+            if movedDistance < dragThreshold and OnToggle then
+                Tween(Btn, 0.08, { BackgroundColor3 = Theme.AccentGlow })
+                task.delay(0.08, function()
+                    if Btn and Btn.Parent then
+                        Tween(Btn, 0.15, { BackgroundColor3 = Theme.Accent })
+                    end
+                end)
+                OnToggle()
             end
-        end)
-        if OnToggle then OnToggle() end
+        end
     end)
 
     return Btn
@@ -379,11 +429,11 @@ local Blurs = {}
 local Components = Screen:FindFirstChild("Components")
 local Library = {}
 local StoredInfo = {
-    ["Sections"] = {},
-    ["Tabs"] = {}
+    Sections = {},
+    Tabs = {},
 }
 
---// Animations
+--// Window animations
 function Animations:Open(Window, Transparency, UseCurrentSize)
     local Original = (UseCurrentSize and Window.Size) or Setup.Size
     local Multiplied = Multiply(Original, 0.92)
@@ -393,13 +443,13 @@ function Animations:Open(Window, Transparency, UseCurrentSize)
     SetProperty(Window, {
         Size = Multiplied,
         GroupTransparency = 1,
-        Visible = true
+        Visible = true,
     })
 
-    if Shadow then Tween(Shadow, 0.3, { Transparency = 0.55 }) end
-    TweenSpring(Window, 0.35, {
+    if Shadow then Tween(Shadow, 0.28, { Transparency = 0.45 }) end
+    TweenSpring(Window, 0.32, {
         Size = Original,
-        GroupTransparency = Transparency or 0
+        GroupTransparency = Transparency or 0,
     })
 end
 
@@ -408,13 +458,13 @@ function Animations:Close(Window)
     local Multiplied = Multiply(Original, 0.92)
     local Shadow = Window:FindFirstChildOfClass("UIStroke")
 
-    if Shadow then Tween(Shadow, 0.2, { Transparency = 1 }) end
-    Tween(Window, 0.22, {
+    if Shadow then Tween(Shadow, 0.18, { Transparency = 1 }) end
+    Tween(Window, 0.18, {
         Size = Multiplied,
-        GroupTransparency = 1
+        GroupTransparency = 1,
     })
 
-    task.wait(0.25)
+    task.wait(0.2)
     Window.Size = Original
     Window.Visible = false
 end
@@ -434,12 +484,11 @@ function Animations:Component(Component, Custom)
         lastPressTime = currentTime
 
         if Custom then
-            Tween(Component, 0.15, { Transparency = 0.80 })
+            Tween(Component, 0.12, { Transparency = 0.75 })
         else
-            local pressColor = IsMobile
-                and LerpColor(Theme.Component, Theme.Accent, 0.12)
+            local pressColor = IsMobile and LerpColor(Theme.Component, Theme.Accent, 0.12)
                 or ColorAdjust(Theme.Component, 8, Setup.ThemeMode)
-            Tween(Component, 0.12, { BackgroundColor3 = pressColor })
+            Tween(Component, 0.1, { BackgroundColor3 = pressColor })
         end
     end)
 
@@ -449,14 +498,14 @@ function Animations:Component(Component, Custom)
         if not isValid then return end
 
         if Custom then
-            Tween(Component, 0.2, { Transparency = 1 })
+            Tween(Component, 0.16, { Transparency = 1 })
         else
-            Tween(Component, 0.2, { BackgroundColor3 = Theme.Component })
+            Tween(Component, 0.16, { BackgroundColor3 = Theme.Component })
         end
     end)
 end
 
---// Library [Window]
+--// Library main
 function Library:CreateWindow(Settings)
     if Settings.AccentColor then
         Theme.Accent = Settings.AccentColor
@@ -478,21 +527,27 @@ function Library:CreateWindow(Settings)
     local Opened = true
     local Maximized = false
     local BlurEnabled = false
-    local MobileToggleButton = nil
+    local MobileToggleButton
 
-    -- Mobile default: not fullscreen
-    if IsMobile then
-        local mobileW = IsLandscape and 0.72 or 0.92
-        local mobileH = IsLandscape and 0.88 or 0.78
+    local function ApplyMobileLayout()
+        if not IsMobile or not Window or not Window.Parent then return end
+        RecomputeMetrics()
 
         if Settings.MobileFullscreen == true then
-            Settings.Size = UDim2.new(1, -SafeAreaInset * 2, 1, -SafeAreaInset * 2)
+            Window.Size = UDim2.new(1, -Metrics.SafeAreaInset * 2, 1, -Metrics.SafeAreaInset * 2)
         else
-            Settings.Size = Settings.Size or UDim2.fromScale(mobileW, mobileH)
+            local w = Metrics.IsLandscape and (Metrics.IsCompact and 0.80 or 0.74) or 0.92
+            local h = Metrics.IsLandscape and 0.88 or (Metrics.IsCompact and 0.74 or 0.80)
+            Window.Size = Settings.Size or UDim2.fromScale(w, h)
         end
 
-        Window.Position = UDim2.fromScale(0.5, 0.52)
         Window.AnchorPoint = Vector2.new(0.5, 0.5)
+        Window.Position = UDim2.fromScale(0.5, 0.53)
+    end
+
+    if IsMobile then
+        Settings.Size = nil
+        ApplyMobileLayout()
     end
 
     for _, Example in next, Window:GetDescendants() do
@@ -503,8 +558,8 @@ function Library:CreateWindow(Settings)
 
     Drag(Window)
     Resizeable(Window, Vector2.new(411, 271), Vector2.new(9e9, 9e9))
-    Setup.Transparency = Settings.Transparency or 0
-    Setup.Size = Settings.Size
+    Setup.Transparency = 0
+    Setup.Size = Settings.Size or Window.Size
     Setup.ThemeMode = Settings.Theme or "Dark"
 
     if Settings.Blurring then
@@ -526,7 +581,7 @@ function Library:CreateWindow(Settings)
             Window.Visible = false
             if MobileToggleButton then MobileToggleButton.Text = "UI" end
         else
-            Animations:Open(Window, Setup.Transparency)
+            Animations:Open(Window, 0)
             Opened = true
             if BlurEnabled and Blurs[Settings.Title] then
                 Blurs[Settings.Title].root.Parent = workspace.CurrentCamera
@@ -535,6 +590,7 @@ function Library:CreateWindow(Settings)
         end
     end
 
+    -- Titlebar buttons
     for _, Button in next, Sidebar.Top.Buttons:GetChildren() do
         if Button:IsA("TextButton") then
             local Name = Button.Name
@@ -543,6 +599,7 @@ function Library:CreateWindow(Settings)
             Connect(Button.MouseButton1Click, function()
                 if Name == "Close" then
                     Close()
+
                 elseif Name == "Maximize" then
                     if Maximized then
                         Maximized = false
@@ -551,9 +608,10 @@ function Library:CreateWindow(Settings)
                         Maximized = true
                         Tween(Window, 0.2, {
                             Size = UDim2.fromScale(1, 1),
-                            Position = UDim2.fromScale(0.5, 0.5)
+                            Position = UDim2.fromScale(0.5, 0.5),
                         })
                     end
+
                 elseif Name == "Minimize" then
                     Opened = false
                     Window.Visible = false
@@ -566,12 +624,14 @@ function Library:CreateWindow(Settings)
         end
     end
 
+    -- Keyboard toggle (desktop)
     Services.Input.InputBegan:Connect(function(Input, Focused)
         if (Input == Setup.Keybind or Input.KeyCode == Setup.Keybind) and not Focused then
             Close()
         end
     end)
 
+    -- Tabs
     function Options:SetTab(Name)
         for _, Button in next, TabList:GetChildren() do
             if Button:IsA("TextButton") then
@@ -580,26 +640,22 @@ function Library:CreateWindow(Settings)
                 local Padding = Button:FindFirstChildOfClass("UIPadding")
 
                 if SameName and not IsOpen.Value then
-                    if Padding then
-                        Tween(Padding, 0.25, { PaddingLeft = UDim.new(0, 25) })
-                    end
-                    Tween(Button, 0.25, {
-                        BackgroundTransparency = 0.85,
+                    if Padding then Tween(Padding, 0.22, { PaddingLeft = UDim.new(0, 25) }) end
+                    Tween(Button, 0.22, {
+                        BackgroundTransparency = 0.80,
                         BackgroundColor3 = Theme.Accent,
                         Size = UDim2.new(1, -15, 0, Setup.TouchTargetMin),
                     })
-                    SetProperty(IsOpen, { Value = true })
+                    IsOpen.Value = true
 
                 elseif not SameName and IsOpen.Value then
-                    if Padding then
-                        Tween(Padding, 0.25, { PaddingLeft = UDim.new(0, 20) })
-                    end
-                    Tween(Button, 0.25, {
+                    if Padding then Tween(Padding, 0.22, { PaddingLeft = UDim.new(0, 20) }) end
+                    Tween(Button, 0.22, {
                         BackgroundTransparency = 1,
                         BackgroundColor3 = Theme.Component,
                         Size = UDim2.new(1, -44, 0, Setup.TouchTargetMin),
                     })
-                    SetProperty(IsOpen, { Value = false })
+                    IsOpen.Value = false
                 end
             end
         end
@@ -613,65 +669,68 @@ function Library:CreateWindow(Settings)
                 if SameName and not IsOpen.Value then
                     IsOpen.Value = true
                     Main.Visible = true
-                    Tween(Main, 0.28, { GroupTransparency = 0 })
-                    if Scroll then
-                        Tween(Scroll["UIPadding"], 0.28, { PaddingTop = UDim.new(0, 6) })
+                    Tween(Main, 0.24, { GroupTransparency = 0 })
+                    if Scroll and Scroll:FindFirstChild("UIPadding") then
+                        Tween(Scroll.UIPadding, 0.24, { PaddingTop = UDim.new(0, 6) })
                     end
 
                 elseif not SameName and IsOpen.Value then
                     IsOpen.Value = false
-                    Tween(Main, 0.18, { GroupTransparency = 1 })
-                    if Scroll then
-                        Tween(Scroll["UIPadding"], 0.18, { PaddingTop = UDim.new(0, 18) })
+                    Tween(Main, 0.16, { GroupTransparency = 1 })
+                    if Scroll and Scroll:FindFirstChild("UIPadding") then
+                        Tween(Scroll.UIPadding, 0.16, { PaddingTop = UDim.new(0, 16) })
                     end
-                    task.delay(0.2, function() Main.Visible = false end)
+                    task.delay(0.18, function()
+                        if Main then Main.Visible = false end
+                    end)
                 end
             end
         end
     end
 
-    function Options:AddTabSection(SettingsTab)
-        local Example = Examples["SectionExample"]
+    function Options:AddTabSection(Info)
+        local Example = Examples.SectionExample
         local Section = Clone(Example)
-        StoredInfo["Sections"][SettingsTab.Name] = SettingsTab.Order
+        StoredInfo.Sections[Info.Name] = Info.Order
         SetProperty(Section, {
             Parent = Example.Parent,
-            Text = SettingsTab.Name,
-            Name = SettingsTab.Name,
-            LayoutOrder = SettingsTab.Order,
+            Text = Info.Name,
+            Name = Info.Name,
+            LayoutOrder = Info.Order,
             Visible = true,
         })
     end
 
-    function Options:AddTab(SettingsTab)
-        if StoredInfo["Tabs"][SettingsTab.Title] then
+    function Options:AddTab(Info)
+        if StoredInfo.Tabs[Info.Title] then
             error("[UI LIB]: A tab with the same name already exists")
         end
 
-        local Example, MainExample = Examples["TabButtonExample"], Examples["MainExample"]
-        local Section = StoredInfo["Sections"][SettingsTab.Section]
+        local Example = Examples.TabButtonExample
+        local MainExample = Examples.MainExample
+        local SectionOrder = StoredInfo.Sections[Info.Section]
         local Main = Clone(MainExample)
         local Tab = Clone(Example)
 
-        if not SettingsTab.Icon then
-            Destroy(Tab["ICO"])
+        if not Info.Icon then
+            Destroy(Tab.ICO)
         else
-            SetProperty(Tab["ICO"], { Image = SettingsTab.Icon })
+            Tab.ICO.Image = Info.Icon
         end
 
-        StoredInfo["Tabs"][SettingsTab.Title] = { Tab }
-        SetProperty(Tab["TextLabel"], { Text = SettingsTab.Title })
+        StoredInfo.Tabs[Info.Title] = { Tab }
+        Tab.TextLabel.Text = Info.Title
         Tab.Size = UDim2.new(1, -44, 0, Setup.TouchTargetMin)
 
         SetProperty(Main, {
             Parent = MainExample.Parent,
-            Name = SettingsTab.Title,
+            Name = Info.Title,
         })
 
         SetProperty(Tab, {
             Parent = Example.Parent,
-            LayoutOrder = Section or (#StoredInfo["Sections"] + 1),
-            Name = SettingsTab.Title,
+            LayoutOrder = SectionOrder or (#StoredInfo.Sections + 1),
+            Name = Info.Title,
             Visible = true,
         })
 
@@ -689,23 +748,23 @@ function Library:CreateWindow(Settings)
     end
 
     -- Notifications
-    local NOTIF_HEIGHT = IsMobile and 65 or 70
+    local NOTIF_HEIGHT = IsMobile and 64 or 70
     local NOTIF_GAP = IsMobile and 6 or 8
     local NOTIF_MAX = Setup.MaxNotifications
-    local NOTIF_TIMEOUT = 2.5
+    local NOTIF_TIMEOUT = 2.0
 
     local function RepositionNotifications()
         for i, notif in ipairs(ActiveNotifications) do
             if notif and notif.Parent then
                 local yOffset = (i - 1) * (NOTIF_HEIGHT + NOTIF_GAP)
-                Tween(notif, 0.2, {
-                    Position = UDim2.new(1, -Setup.PaddingX - 10, 1, -(yOffset + NOTIF_HEIGHT + 10 + SafeAreaInset))
+                Tween(notif, 0.18, {
+                    Position = UDim2.new(1, -Setup.PaddingX - 10, 1, -(yOffset + NOTIF_HEIGHT + 10 + Metrics.SafeAreaInset))
                 })
             end
         end
     end
 
-    function Options:Notify(SettingsNotif)
+    function Options:Notify(Info)
         if #ActiveNotifications >= NOTIF_MAX then
             local oldest = table.remove(ActiveNotifications, 1)
             if oldest and oldest.Parent then
@@ -716,36 +775,38 @@ function Library:CreateWindow(Settings)
             end
         end
 
-        local Notification = Clone(Components["Notification"])
+        local Notification = Clone(Components.Notification)
         if not Notification then return end
 
         local Title, Description = Options:GetLabels(Notification)
-        local Timer = Notification["Timer"]
+        local Timer = Notification.Timer
 
         if Timer and Timer:FindFirstChild("Fill") then
             Timer.Fill.BackgroundColor3 = Theme.Accent
         end
 
-        if Title then SetProperty(Title, { Text = SettingsNotif.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsNotif.Description }) end
-        SetProperty(Notification, { Parent = Screen["Frame"] })
+        if Title then Title.Text = Info.Title or "Notification" end
+        if Description then Description.Text = Info.Description or "" end
+        Notification.Parent = Screen.Frame
 
-        Notification.Position = UDim2.new(1, 10, 1, -80)
+        Notification.Position = UDim2.new(1, 12, 1, -80)
         Notification.Visible = true
+        Notification.GroupTransparency = 0
 
         table.insert(ActiveNotifications, Notification)
         RepositionNotifications()
 
-        local Duration = SettingsNotif.Duration or 3
+        local Duration = Info.Duration or 2.8
         task.spawn(function()
             xpcall(function()
-                Animations:Open(Notification, Setup.Transparency, true)
+                Animations:Open(Notification, 0, true)
                 if Timer then
+                    Timer.Size = UDim2.new(1, 0, 0, 4)
                     Tween(Timer, Duration, { Size = UDim2.new(0, 0, 0, 4) })
                 end
                 task.wait(Duration)
                 Animations:Close(Notification)
-                task.wait(0.35)
+                task.wait(0.25)
 
                 for i, n in ipairs(ActiveNotifications) do
                     if n == Notification then
@@ -756,85 +817,95 @@ function Library:CreateWindow(Settings)
                 RepositionNotifications()
 
                 task.wait(NOTIF_TIMEOUT)
-                if Notification and Notification.Parent then
-                    Notification:Destroy()
-                end
+                if Notification and Notification.Parent then Notification:Destroy() end
             end, function(err)
                 warn("[UI LIB] Notification error:", err)
             end)
         end)
     end
 
+    -- Helpers
     function Options:GetLabels(Component)
         local Labels = Component:FindFirstChild("Labels")
-        return Labels.Title, Labels.Description
+        return Labels and Labels:FindFirstChild("Title"), Labels and Labels:FindFirstChild("Description")
     end
 
-    function Options:AddSection(SettingsSection)
-        local Section = Clone(Components["Section"])
+    function Options:AddSection(Info)
+        local Section = Clone(Components.Section)
         if not Section then return end
         SetProperty(Section, {
-            Text = SettingsSection.Name,
-            Parent = SettingsSection.Tab,
+            Text = Info.Name,
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddButton(SettingsButton)
-        local Button = Clone(Components["Button"])
+    -- Button
+    function Options:AddButton(Info)
+        local Button = Clone(Components.Button)
         if not Button then return end
 
         local Title, Description = Options:GetLabels(Button)
         Button.Size = UDim2.new(1, 0, 0, math.max(Button.Size.Y.Offset, Setup.TouchTargetMin + Setup.PaddingY))
 
         local function HandlePress()
-            Tween(Button, 0.08, { BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.3) })
+            Tween(Button, 0.08, { BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.28) })
             task.delay(0.08, function()
                 if Button and Button.Parent then
-                    Tween(Button, 0.2, { BackgroundColor3 = Theme.Component })
+                    Tween(Button, 0.16, { BackgroundColor3 = Theme.Component })
                 end
             end)
-            SettingsButton.Callback()
+            if Info.Callback then Info.Callback() end
         end
 
         Connect(Button.MouseButton1Click, HandlePress)
         Connect(Button.InputBegan, function(Input)
-            if Input.UserInputType == Enum.UserInputType.Touch then HandlePress() end
+            if Input.UserInputType == Enum.UserInputType.Touch then
+                HandlePress()
+            end
         end)
 
         Animations:Component(Button)
-        if Title then SetProperty(Title, { Text = SettingsButton.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsButton.Description }) end
+        if Title then Title.Text = Info.Title or "Button" end
+        if Description then Description.Text = Info.Description or "" end
         SetProperty(Button, {
-            Name = SettingsButton.Title,
-            Parent = SettingsButton.Tab,
+            Name = Info.Title or "Button",
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddInput(SettingsInput)
-        local Input = Clone(Components["Input"])
+    -- Input
+    function Options:AddInput(Info)
+        local Input = Clone(Components.Input)
         if not Input then return end
 
         local Title, Description = Options:GetLabels(Input)
-        local TextBox = Input["Main"]["Input"]
+        local TextBox = Input.Main and Input.Main:FindFirstChild("Input")
+
         Input.Size = UDim2.new(1, 0, 0, math.max(Input.Size.Y.Offset, Setup.TouchTargetMin + Setup.PaddingY))
         if TextBox then TextBox.TextSize = Setup.FontSize end
 
         local Stroke = Input:FindFirstChildOfClass("UIStroke")
         if TextBox then
             Connect(TextBox.Focused, function()
-                if Stroke then Tween(Stroke, 0.15, { Color = Theme.Accent, Thickness = 1.5 }) end
+                if Stroke then
+                    Tween(Stroke, 0.12, { Color = Theme.Accent, Thickness = 1.5 })
+                end
             end)
+
             Connect(TextBox.FocusLost, function()
-                if Stroke then Tween(Stroke, 0.2, { Color = Theme.Outline, Thickness = 1 }) end
-                SettingsInput.Callback(TextBox.Text)
+                if Stroke then
+                    Tween(Stroke, 0.16, { Color = Theme.Outline, Thickness = 1 })
+                end
+                if Info.Callback then Info.Callback(TextBox.Text) end
             end)
         end
 
         Connect(Input.MouseButton1Click, function()
             if TextBox then TextBox:CaptureFocus() end
         end)
+
         Connect(Input.InputBegan, function(Inp)
             if Inp.UserInputType == Enum.UserInputType.Touch then
                 if TextBox then TextBox:CaptureFocus() end
@@ -842,39 +913,44 @@ function Library:CreateWindow(Settings)
         end)
 
         Animations:Component(Input)
-        if Title then SetProperty(Title, { Text = SettingsInput.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsInput.Description }) end
+        if Title then Title.Text = Info.Title or "Input" end
+        if Description then Description.Text = Info.Description or "" end
         SetProperty(Input, {
-            Name = SettingsInput.Title,
-            Parent = SettingsInput.Tab,
+            Name = Info.Title or "Input",
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddToggle(SettingsToggle)
-        local Toggle = Clone(Components["Toggle"])
+    -- Toggle
+    function Options:AddToggle(Info)
+        local Toggle = Clone(Components.Toggle)
         if not Toggle then return end
 
         local Title, Description = Options:GetLabels(Toggle)
-        local On = Toggle["Value"]
-        local Main = Toggle["Main"]
-        local Circle = Main["Circle"]
+        local On = Toggle.Value
+        local Main = Toggle.Main
+        local Circle = Main and Main:FindFirstChild("Circle")
 
         Toggle.Size = UDim2.new(1, 0, 0, math.max(Toggle.Size.Y.Offset, Setup.TouchTargetMin))
 
         local function Set(Value)
             if Value then
-                Tween(Main, 0.22, { BackgroundColor3 = Theme.Accent })
-                Tween(Circle, 0.22, {
-                    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                    Position = UDim2.new(1, -16, 0.5, 0),
-                })
+                Tween(Main, 0.18, { BackgroundColor3 = Theme.Accent })
+                if Circle then
+                    Tween(Circle, 0.18, {
+                        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                        Position = UDim2.new(1, -16, 0.5, 0),
+                    })
+                end
             else
-                Tween(Main, 0.22, { BackgroundColor3 = Theme.Interactables })
-                Tween(Circle, 0.22, {
-                    BackgroundColor3 = Theme.Primary,
-                    Position = UDim2.new(0, 3, 0.5, 0),
-                })
+                Tween(Main, 0.18, { BackgroundColor3 = Theme.Interactables })
+                if Circle then
+                    Tween(Circle, 0.18, {
+                        BackgroundColor3 = Theme.Primary,
+                        Position = UDim2.new(0, 3, 0.5, 0),
+                    })
+                end
             end
             if On then On.Value = Value end
         end
@@ -882,31 +958,34 @@ function Library:CreateWindow(Settings)
         local function HandleTap()
             local Value = not (On and On.Value or false)
             Set(Value)
-            SettingsToggle.Callback(Value)
+            if Info.Callback then Info.Callback(Value) end
         end
 
         Connect(Toggle.MouseButton1Click, HandleTap)
         Connect(Toggle.InputBegan, function(Input)
-            if Input.UserInputType == Enum.UserInputType.Touch then HandleTap() end
+            if Input.UserInputType == Enum.UserInputType.Touch then
+                HandleTap()
+            end
         end)
 
         Animations:Component(Toggle)
-        Set(SettingsToggle.Default)
-        if Title then SetProperty(Title, { Text = SettingsToggle.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsToggle.Description }) end
+        Set(Info.Default == true)
+        if Title then Title.Text = Info.Title or "Toggle" end
+        if Description then Description.Text = Info.Description or "" end
         SetProperty(Toggle, {
-            Name = SettingsToggle.Title,
-            Parent = SettingsToggle.Tab,
+            Name = Info.Title or "Toggle",
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddKeybind(SettingsKeybind)
-        local Dropdown = Clone(Components["Keybind"])
+    -- Keybind
+    function Options:AddKeybind(Info)
+        local Dropdown = Clone(Components.Keybind)
         if not Dropdown then return end
 
         local Title, Description = Options:GetLabels(Dropdown)
-        local Bind = Dropdown["Main"] and Dropdown["Main"].Options
+        local Bind = Dropdown.Main and Dropdown.Main:FindFirstChild("Options")
 
         local Mouse = {
             Enum.UserInputType.MouseButton1,
@@ -914,119 +993,136 @@ function Library:CreateWindow(Settings)
             Enum.UserInputType.MouseButton3,
         }
         local Types = {
-            ["Mouse"] = "Enum.UserInputType.MouseButton",
-            ["Key"] = "Enum.KeyCode.",
+            Mouse = "Enum.UserInputType.MouseButton",
+            Key = "Enum.KeyCode.",
         }
 
         local function StartListening()
             local Finished = false
-            if Bind then SetProperty(Bind, { Text = "..." }) end
+            if Bind then Bind.Text = "..." end
 
             local Stroke = Dropdown:FindFirstChildOfClass("UIStroke")
-            if Stroke then Tween(Stroke, 0.15, { Color = Theme.Accent }) end
+            if Stroke then Tween(Stroke, 0.12, { Color = Theme.Accent }) end
 
             local Detect
             Detect = Connect(game.UserInputService.InputBegan, function(Key, Focused)
-                if not Finished and not Focused then
-                    Finished = true
-                    local InputType = Key.UserInputType
+                if Finished or Focused then return end
+                Finished = true
 
-                    if table.find(Mouse, InputType) then
-                        SettingsKeybind.Callback(Key)
-                        if Bind then
-                            SetProperty(Bind, { Text = tostring(InputType):gsub(Types.Mouse, "MB") })
-                        end
-                    elseif InputType == Enum.UserInputType.Keyboard then
-                        SettingsKeybind.Callback(Key)
-                        if Bind then
-                            SetProperty(Bind, { Text = tostring(Key.KeyCode):gsub(Types.Key, "") })
-                        end
-                    elseif InputType == Enum.UserInputType.Touch then
-                        SettingsKeybind.Callback(Key)
-                        if Bind then SetProperty(Bind, { Text = "TAP" }) end
-                    end
+                local InputType = Key.UserInputType
 
-                    if Stroke then Tween(Stroke, 0.2, { Color = Theme.Outline }) end
-                    Detect:Disconnect()
+                if table.find(Mouse, InputType) then
+                    if Info.Callback then Info.Callback(Key) end
+                    if Bind then Bind.Text = tostring(InputType):gsub(Types.Mouse, "MB") end
+
+                elseif InputType == Enum.UserInputType.Keyboard then
+                    if Info.Callback then Info.Callback(Key) end
+                    if Bind then Bind.Text = tostring(Key.KeyCode):gsub(Types.Key, "") end
+
+                elseif InputType == Enum.UserInputType.Touch then
+                    if Info.Callback then Info.Callback(Key) end
+                    if Bind then Bind.Text = "TAP" end
                 end
+
+                if Stroke then Tween(Stroke, 0.16, { Color = Theme.Outline }) end
+                Detect:Disconnect()
             end)
         end
 
         Connect(Dropdown.MouseButton1Click, StartListening)
         Connect(Dropdown.InputBegan, function(Input)
-            if Input.UserInputType == Enum.UserInputType.Touch then StartListening() end
+            if Input.UserInputType == Enum.UserInputType.Touch then
+                StartListening()
+            end
         end)
 
         Animations:Component(Dropdown)
-        if Title then SetProperty(Title, { Text = SettingsKeybind.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsKeybind.Description }) end
+        if Title then Title.Text = Info.Title or "Keybind" end
+        if Description then Description.Text = Info.Description or "" end
         SetProperty(Dropdown, {
-            Name = SettingsKeybind.Title,
-            Parent = SettingsKeybind.Tab,
+            Name = Info.Title or "Keybind",
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddDropdown(SettingsDropdown)
-        local Dropdown = Clone(Components["Dropdown"])
+    -- Dropdown (bottom-sheet on mobile)
+    function Options:AddDropdown(Info)
+        local Dropdown = Clone(Components.Dropdown)
         if not Dropdown then return end
 
         local Title, Description = Options:GetLabels(Dropdown)
-        local Text = Dropdown["Main"] and Dropdown["Main"].Options
+        local Text = Dropdown.Main and Dropdown.Main:FindFirstChild("Options")
 
         local function OpenDropdown()
-            local Example = Clone(Examples["DropdownExample"])
+            local Example = Clone(Examples.DropdownExample)
             if not Example then return end
-            local Buttons = Example["Top"] and Example["Top"]["Buttons"]
+            local Buttons = Example.Top and Example.Top:FindFirstChild("Buttons")
             if not Buttons then return end
 
             if IsMobile then
-                Example.Size = UDim2.new(1, -SafeAreaInset * 2, 1, -SafeAreaInset * 2)
+                local sheetHeight = Metrics.IsCompact and 0.72 or 0.66
+                Example.AnchorPoint = Vector2.new(0.5, 1)
+                Example.Position = UDim2.new(0.5, 0, 1, 50)
+                Example.Size = UDim2.new(1, -Metrics.SafeAreaInset * 2, sheetHeight, 0)
+            else
                 Example.Position = UDim2.fromScale(0.5, 0.5)
                 Example.AnchorPoint = Vector2.new(0.5, 0.5)
             end
 
-            Tween(BG, 0.2, { BackgroundTransparency = 0.5 })
+            Tween(BG, 0.16, { BackgroundTransparency = 0.25 })
             SetProperty(Example, { Parent = Window })
             Animations:Open(Example, 0, true)
+
+            if IsMobile then
+                Tween(Example, 0.22, { Position = UDim2.new(0.5, 0, 1, -Metrics.SafeAreaInset) })
+            end
+
+            local function CloseDropdown()
+                Tween(BG, 0.16, { BackgroundTransparency = 1 })
+                if IsMobile then
+                    Tween(Example, 0.16, { Position = UDim2.new(0.5, 0, 1, 50) })
+                    task.wait(0.18)
+                else
+                    Animations:Close(Example)
+                    task.wait(0.18)
+                end
+                if Example and Example.Parent then Example:Destroy() end
+            end
 
             for _, Button in next, Buttons:GetChildren() do
                 if Button:IsA("TextButton") then
                     Animations:Component(Button, true)
-
-                    local function CloseDropdown()
-                        Tween(BG, 0.2, { BackgroundTransparency = 1 })
-                        Animations:Close(Example)
-                        task.wait(2.5)
-                        if Example and Example.Parent then Example:Destroy() end
-                    end
-
                     Connect(Button.MouseButton1Click, CloseDropdown)
                     Connect(Button.InputBegan, function(Input)
-                        if Input.UserInputType == Enum.UserInputType.Touch then CloseDropdown() end
+                        if Input.UserInputType == Enum.UserInputType.Touch then
+                            CloseDropdown()
+                        end
                     end)
                 end
             end
 
-            for Index, Option in next, SettingsDropdown.Options do
-                local Button = Clone(Examples["DropdownButtonExample"])
+            for Index, Option in next, (Info.Options or {}) do
+                local Button = Clone(Examples.DropdownButtonExample)
                 if not Button then continue end
 
                 local BTitle, BDesc = Options:GetLabels(Button)
-                local Selected = Button["Value"]
+                local Selected = Button.Value
+
                 Button.Size = UDim2.new(1, 0, 0, math.max(Button.Size.Y.Offset, Setup.TouchTargetMin + Setup.PaddingY))
 
                 Animations:Component(Button)
-                if BTitle then SetProperty(BTitle, { Text = Index }) end
+                if BTitle then BTitle.Text = tostring(Index) end
                 SetProperty(Button, { Parent = Example.ScrollingFrame, Visible = true })
                 if BDesc then BDesc:Destroy() end
 
                 local function SelectOption()
                     local NewValue = not (Selected and Selected.Value or false)
+
                     if NewValue then
-                        Tween(Button, 0.2, { BackgroundColor3 = LerpColor(Theme.Interactables, Theme.Accent, 0.25) })
-                        SettingsDropdown.Callback(Option)
-                        if Text then Text.Text = Index end
+                        Tween(Button, 0.16, { BackgroundColor3 = LerpColor(Theme.Interactables, Theme.Accent, 0.24) })
+                        if Info.Callback then Info.Callback(Option) end
+                        if Text then Text.Text = tostring(Index) end
 
                         for _, Others in next, Example.ScrollingFrame:GetChildren() do
                             if Others:IsA("TextButton") and Others ~= Button then
@@ -1034,68 +1130,71 @@ function Library:CreateWindow(Settings)
                             end
                         end
                     else
-                        Tween(Button, 0.2, { BackgroundColor3 = Theme.Component })
+                        Tween(Button, 0.16, { BackgroundColor3 = Theme.Component })
                     end
 
                     if Selected then Selected.Value = NewValue end
-                    Tween(BG, 0.2, { BackgroundTransparency = 1 })
-                    Animations:Close(Example)
-                    task.wait(2.5)
-                    if Example and Example.Parent then Example:Destroy() end
+                    CloseDropdown()
                 end
 
                 Connect(Button.MouseButton1Click, SelectOption)
                 Connect(Button.InputBegan, function(Input)
-                    if Input.UserInputType == Enum.UserInputType.Touch then SelectOption() end
+                    if Input.UserInputType == Enum.UserInputType.Touch then
+                        SelectOption()
+                    end
                 end)
             end
         end
 
         Connect(Dropdown.MouseButton1Click, OpenDropdown)
         Connect(Dropdown.InputBegan, function(Input)
-            if Input.UserInputType == Enum.UserInputType.Touch then OpenDropdown() end
+            if Input.UserInputType == Enum.UserInputType.Touch then
+                OpenDropdown()
+            end
         end)
 
         Animations:Component(Dropdown)
-        if Title then SetProperty(Title, { Text = SettingsDropdown.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsDropdown.Description }) end
+        if Title then Title.Text = Info.Title or "Dropdown" end
+        if Description then Description.Text = Info.Description or "" end
         SetProperty(Dropdown, {
-            Name = SettingsDropdown.Title,
-            Parent = SettingsDropdown.Tab,
+            Name = Info.Title or "Dropdown",
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddSlider(SettingsSlider)
-        local Slider = Clone(Components["Slider"])
+    -- Slider
+    function Options:AddSlider(Info)
+        local Slider = Clone(Components.Slider)
         if not Slider then return end
 
         local Title, Desc = Options:GetLabels(Slider)
-        local Main = Slider["Slider"]
-        local Amount = Main["Main"].Input
-        local Slide = Main["Slide"]
-        local Fire = Slide["Fire"]
-        local Fill = Slide["Highlight"]
-        local Circle = Fill["Circle"]
+        local Main = Slider.Slider
+        local Amount = Main.Main.Input
+        local Slide = Main.Slide
+        local Fire = Slide.Fire
+        local Fill = Slide.Highlight
+        local Circle = Fill.Circle
 
-        local trackHeight = IsMobile and (6 + ScreenScale) or 4
-        local handleSize = IsMobile and (20 + ScreenScale) or 14
+        local trackHeight = IsMobile and (6 + Setup.ScreenScale) or 4
+        local handleSize = IsMobile and (20 + Setup.ScreenScale) or 14
 
-        if Slide then Slide.Size = UDim2.new(1, 0, 0, trackHeight) end
-        if Circle then Circle.Size = UDim2.new(0, handleSize, 0, handleSize) end
-        if Fill then Fill.BackgroundColor3 = Theme.Accent end
-        if Circle then Circle.BackgroundColor3 = Theme.AccentGlow end
+        Slide.Size = UDim2.new(1, 0, 0, trackHeight)
+        Circle.Size = UDim2.new(0, handleSize, 0, handleSize)
 
-        local MinValue = SettingsSlider.MinValue or 0
-        local MaxValue = SettingsSlider.MaxValue or 100
+        Fill.BackgroundColor3 = Theme.Accent
+        Circle.BackgroundColor3 = Theme.AccentGlow
+
+        local MinValue = Info.MinValue or 0
+        local MaxValue = Info.MaxValue or 100
         local Active = false
-        local Value = SettingsSlider.DefaultValue or MinValue
+        local Value = Info.DefaultValue or MinValue
         local LastUpdateTime = 0
         local UpdateThrottle = 0.016
 
         local function SetNumber(Number)
-            if SettingsSlider.AllowDecimals then
-                local Power = 10 ^ (SettingsSlider.DecimalAmount or 2)
+            if Info.AllowDecimals then
+                local Power = 10 ^ (Info.DecimalAmount or 2)
                 return math.floor(Number * Power + 0.5) / Power
             else
                 return math.round(Number)
@@ -1103,21 +1202,20 @@ function Library:CreateWindow(Settings)
         end
 
         local function UpdateFromX(RawX)
-            local currentTime = tick()
-            if IsMobile and (currentTime - LastUpdateTime < UpdateThrottle) then return end
-            LastUpdateTime = currentTime
+            local now = tick()
+            if IsMobile and (now - LastUpdateTime < UpdateThrottle) then return end
+            LastUpdateTime = now
 
-            if not Slide then return end
             local slidePos = Slide.AbsolutePosition.X
             local slideSize = Slide.AbsoluteSize.X
             local Scale = math.clamp((RawX - slidePos) / slideSize, 0, 1)
             Value = SetNumber(MinValue + Scale * (MaxValue - MinValue))
 
-            if Amount then Amount.Text = tostring(Value) end
-            if Fill then Fill.Size = UDim2.fromScale(Scale, 1) end
-            if Circle then Circle.Position = UDim2.new(Scale, -(handleSize / 2), 0.5, 0) end
+            Amount.Text = tostring(Value)
+            Fill.Size = UDim2.fromScale(Scale, 1)
+            Circle.Position = UDim2.new(Scale, -(handleSize / 2), 0.5, 0)
 
-            SettingsSlider.Callback(Value)
+            if Info.Callback then Info.Callback(Value) end
         end
 
         local function UpdateFromNumber(Number)
@@ -1125,10 +1223,11 @@ function Library:CreateWindow(Settings)
             local Scale = (Clamped - MinValue) / (MaxValue - MinValue)
 
             Value = SetNumber(Clamped)
-            if Amount then Amount.Text = tostring(Value) end
-            if Fill then Fill.Size = UDim2.fromScale(Scale, 1) end
-            if Circle then Circle.Position = UDim2.new(Scale, -(handleSize / 2), 0.5, 0) end
-            SettingsSlider.Callback(Value)
+            Amount.Text = tostring(Value)
+            Fill.Size = UDim2.fromScale(Scale, 1)
+            Circle.Position = UDim2.new(Scale, -(handleSize / 2), 0.5, 0)
+
+            if Info.Callback then Info.Callback(Value) end
         end
 
         Connect(Fire.MouseButton1Down, function()
@@ -1143,7 +1242,9 @@ function Library:CreateWindow(Settings)
             if Input.UserInputType == Enum.UserInputType.Touch then
                 Active = true
                 Connect(Input.Changed, function()
-                    if Active then UpdateFromX(Input.Position.X) end
+                    if Active then
+                        UpdateFromX(Input.Position.X)
+                    end
                 end)
             end
         end)
@@ -1156,97 +1257,98 @@ function Library:CreateWindow(Settings)
         end)
 
         Connect(Services.Input.TouchMoved, function(touch)
-            if Active then UpdateFromX(touch.Position.X) end
+            if Active then
+                UpdateFromX(touch.Position.X)
+            end
         end)
 
-        if Amount then
-            Connect(Amount.FocusLost, function()
-                UpdateFromNumber(tonumber(Amount.Text) or MinValue)
-            end)
-        end
+        Connect(Amount.FocusLost, function()
+            UpdateFromNumber(tonumber(Amount.Text) or MinValue)
+        end)
 
         Connect(Fire.InputBegan, function(Input)
             if Input.UserInputType == Enum.UserInputType.Touch
                 or Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                if Fill then Tween(Fill, 0.08, { BackgroundColor3 = Theme.AccentGlow }) end
+                Tween(Fill, 0.08, { BackgroundColor3 = Theme.AccentGlow })
             end
         end)
 
         Connect(Fire.InputEnded, function(Input)
             if Input.UserInputType == Enum.UserInputType.Touch
                 or Input.UserInputType == Enum.UserInputType.MouseButton1 then
-                if Fill then Tween(Fill, 0.15, { BackgroundColor3 = Theme.Accent }) end
+                Tween(Fill, 0.12, { BackgroundColor3 = Theme.Accent })
             end
         end)
 
         UpdateFromNumber(Value)
 
         Animations:Component(Slider)
-        if Title then SetProperty(Title, { Text = SettingsSlider.Title }) end
-        if Desc then SetProperty(Desc, { Text = SettingsSlider.Description }) end
+        if Title then Title.Text = Info.Title or "Slider" end
+        if Desc then Desc.Text = Info.Description or "" end
         SetProperty(Slider, {
-            Name = SettingsSlider.Title,
-            Parent = SettingsSlider.Tab,
+            Name = Info.Title or "Slider",
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
-    function Options:AddParagraph(SettingsParagraph)
-        local Paragraph = Clone(Components["Paragraph"])
+    function Options:AddParagraph(Info)
+        local Paragraph = Clone(Components.Paragraph)
         if not Paragraph then return end
 
         local Title, Description = Options:GetLabels(Paragraph)
-        if Title then SetProperty(Title, { Text = SettingsParagraph.Title }) end
-        if Description then SetProperty(Description, { Text = SettingsParagraph.Description }) end
+        if Title then Title.Text = Info.Title or "Paragraph" end
+        if Description then Description.Text = Info.Description or "" end
         SetProperty(Paragraph, {
-            Parent = SettingsParagraph.Tab,
+            Parent = Info.Tab,
             Visible = true,
         })
     end
 
+    -- Theme system
     local ThemeRules = {
         Names = {
-            ["Paragraph"] = function(Label)
+            Paragraph = function(Label)
                 if Label:IsA("TextButton") then
                     Label.BackgroundColor3 = ColorAdjust(Theme.Component, 5, "Dark")
                 end
             end,
-            ["Title"] = function(Label)
+            Title = function(Label)
                 if Label:IsA("TextLabel") then
                     Label.TextColor3 = Theme.Title
-                    if Setup.FontSize then Label.TextSize = Setup.FontSize end
+                    Label.TextSize = Setup.FontSize
                 end
             end,
-            ["Description"] = function(Label)
+            Description = function(Label)
                 if Label:IsA("TextLabel") then
                     Label.TextColor3 = Theme.Description
-                    if Setup.FontSize then Label.TextSize = Setup.FontSize - 1 end
+                    Label.TextSize = math.max(12, Setup.FontSize - 1)
                 end
             end,
-            ["Section"] = function(Label)
+            Section = function(Label)
                 if Label:IsA("TextLabel") then
                     Label.TextColor3 = Theme.Accent
                 end
             end,
-            ["Options"] = function(Label)
+            Options = function(Label)
                 if Label:IsA("TextLabel") and Label.Parent.Name == "Main" then
                     Label.TextColor3 = Theme.Title
                 end
             end,
-            ["Notification"] = function(Label)
+            Notification = function(Label)
                 if Label:IsA("CanvasGroup") then
                     Label.BackgroundColor3 = Theme.Secondary
-                    if Label:FindFirstChildOfClass("UIStroke") then
-                        Label.UIStroke.Color = Theme.Outline
-                    end
+                    local st = Label:FindFirstChildOfClass("UIStroke")
+                    if st then st.Color = Theme.Outline end
+                    Label.GroupTransparency = 0
                 end
             end,
-            ["TextLabel"] = function(Label)
+            TextLabel = function(Label)
                 if Label:IsA("TextLabel") and Label.Parent:FindFirstChild("List") then
                     Label.TextColor3 = Theme.Tab
                 end
             end,
-            ["Main"] = function(Label)
+            Main = function(Label)
                 if Label:IsA("Frame") then
                     if Label.Parent == Window then
                         Label.BackgroundColor3 = Theme.Secondary
@@ -1264,13 +1366,13 @@ function Library:CreateWindow(Settings)
                     Label.TextColor3 = Theme.Title
                 end
             end,
-            ["Amount"] = function(Label)
+            Amount = function(Label)
                 if Label:IsA("Frame") then Label.BackgroundColor3 = Theme.Interactables end
             end,
-            ["Slide"] = function(Label)
+            Slide = function(Label)
                 if Label:IsA("Frame") then Label.BackgroundColor3 = Theme.Interactables end
             end,
-            ["Input"] = function(Label)
+            Input = function(Label)
                 if Label:IsA("TextLabel") then
                     Label.TextColor3 = Theme.Title
                 elseif Label:FindFirstChild("Labels") then
@@ -1279,38 +1381,39 @@ function Library:CreateWindow(Settings)
                     Label.TextColor3 = Theme.Title
                 end
             end,
-            ["Outline"] = function(Stroke)
+            Outline = function(Stroke)
                 if Stroke:IsA("UIStroke") then Stroke.Color = Theme.Outline end
             end,
-            ["DropdownExample"] = function(Label)
+            DropdownExample = function(Label)
                 Label.BackgroundColor3 = Theme.Secondary
             end,
-            ["Underline"] = function(Label)
+            Underline = function(Label)
                 if Label:IsA("Frame") then Label.BackgroundColor3 = Theme.Outline end
             end,
-            ["Highlight"] = function(Label)
+            Highlight = function(Label)
                 if Label:IsA("Frame") and Label.Parent and Label.Parent.Name == "Slide" then
                     Label.BackgroundColor3 = Theme.Accent
                 end
             end,
         },
+
         Classes = {
-            ["ImageLabel"] = function(Label)
+            ImageLabel = function(Label)
                 if Label.Image ~= "rbxassetid://6644618143" then
                     Label.ImageColor3 = Theme.Icon
                 end
             end,
-            ["TextLabel"] = function(Label)
+            TextLabel = function(Label)
                 if Label:FindFirstChild("Padding") then
                     Label.TextColor3 = Theme.Title
                 end
             end,
-            ["TextButton"] = function(Label)
+            TextButton = function(Label)
                 if Label:FindFirstChild("Labels") then
                     Label.BackgroundColor3 = Theme.Component
                 end
             end,
-            ["ScrollingFrame"] = function(Label)
+            ScrollingFrame = function(Label)
                 Label.ScrollBarImageColor3 = Theme.Accent
             end,
         },
@@ -1318,15 +1421,20 @@ function Library:CreateWindow(Settings)
 
     function Options:SetTheme(Info)
         Theme = Info or Theme
+
         Window.BackgroundColor3 = Theme.Primary
         Holder.BackgroundColor3 = Theme.Secondary
-        if Window:FindFirstChildOfClass("UIStroke") then
-            Window.UIStroke.Color = Theme.Shadow
-        end
+        Window.GroupTransparency = 0
+
+        if BG then BG.BackgroundTransparency = 0.25 end
+
+        local WindowStroke = Window:FindFirstChildOfClass("UIStroke")
+        if WindowStroke then WindowStroke.Color = Theme.Shadow end
 
         for _, Descendant in next, Screen:GetDescendants() do
             local NameRule = ThemeRules.Names[Descendant.Name]
             local ClassRule = ThemeRules.Classes[Descendant.ClassName]
+
             if NameRule then
                 NameRule(Descendant)
             elseif ClassRule then
@@ -1334,31 +1442,32 @@ function Library:CreateWindow(Settings)
             end
         end
 
-        local MobileToggle = Screen:FindFirstChild("MobileToggle")
-        if MobileToggle and MobileToggle:IsA("TextButton") then
-            MobileToggle.BackgroundColor3 = Theme.Accent
-            local s = MobileToggle:FindFirstChildOfClass("UIStroke")
+        local Toggle = Screen:FindFirstChild("MobileToggle")
+        if Toggle and Toggle:IsA("TextButton") then
+            Toggle.BackgroundColor3 = Theme.Accent
+            local s = Toggle:FindFirstChildOfClass("UIStroke")
             if s then s.Color = Theme.Outline end
         end
     end
 
+    -- Settings API
     function Options:SetSetting(Setting, Value)
         if Setting == "Size" then
             Window.Size = Value
             Setup.Size = Value
 
         elseif Setting == "Transparency" then
-            Window.GroupTransparency = Value
-            Setup.Transparency = Value
+            Window.GroupTransparency = 0
+            Setup.Transparency = 0
             for _, Notif in next, Screen:GetDescendants() do
                 if Notif:IsA("CanvasGroup") and Notif.Name == "Notification" then
-                    Notif.GroupTransparency = Value
+                    Notif.GroupTransparency = 0
                 end
             end
 
         elseif Setting == "Blur" then
             local AlreadyBlurred = Blurs[Settings.Title]
-            local Root = AlreadyBlurred and AlreadyBlurred["root"]
+            local Root = AlreadyBlurred and AlreadyBlurred.root
 
             if Value then
                 BlurEnabled = true
@@ -1367,8 +1476,10 @@ function Library:CreateWindow(Settings)
                 elseif Root and not Root.Parent then
                     Root.Parent = workspace.CurrentCamera
                 end
-            elseif not Value and (AlreadyBlurred and Root and Root.Parent) then
-                Root.Parent = nil
+            else
+                if AlreadyBlurred and Root and Root.Parent then
+                    Root.Parent = nil
+                end
                 BlurEnabled = false
             end
 
@@ -1392,14 +1503,29 @@ function Library:CreateWindow(Settings)
         end
     end
 
-    SetProperty(Window, { Size = Settings.Size, Visible = true, Parent = Screen })
+    -- Finalize
+    SetProperty(Window, {
+        Size = Settings.Size or Window.Size,
+        Visible = true,
+        Parent = Screen,
+        GroupTransparency = 0,
+    })
+
     Options:SetTheme()
-    Animations:Open(Window, Settings.Transparency or 0)
+    Animations:Open(Window, 0)
 
     if IsMobile then
         MobileToggleButton = CreateMobileToggle(Screen, Close)
         if MobileToggleButton then
             MobileToggleButton.Text = Opened and "X" or "UI"
+        end
+
+        if Camera then
+            Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+                if Window and Window.Parent and IsMobile then
+                    ApplyMobileLayout()
+                end
+            end)
         end
     end
 
