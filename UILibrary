@@ -1,61 +1,79 @@
--- ============================================================
---  Stellar UI  |  Mobile Component Library  |  v1.0.0
---  Inspired by x2zu [ Stellar ] dark aesthetic
---  Author : Stellar Team  |  License : MIT  |  2026
--- ============================================================
---
---  USAGE (Roblox ModuleScript):
---    local StellarUI = require(path.to.StellarUI)
---    local ui = StellarUI.new(screenGui)
---
---    local toggle = ui:Toggle({ Label = "Enable Feature", Default = false })
---    toggle.OnChanged:Connect(function(value) print(value) end)
---
--- ============================================================
+--[[
+════════════════════════════════════════════════════════════════
+  Stellar UI  ·  Mobile Component Library  ·  v1.0.0
+  https://github.com/your-username/StellarUI
 
-local StellarUI = {}
+  Inspired by x2zu [ Stellar ] dark aesthetic
+  License : MIT  ·  Author : Stellar Team  ·  2026
+
+  ┌─ Components ──────────────────────────────────────┐
+  │  Toggle        Slider         Badge               │
+  │  Button        Select         ProgressBar         │
+  │  TextInput     CodeBlock      Avatar              │
+  │  Notification  NavBar         SectionHeader       │
+  └───────────────────────────────────────────────────┘
+
+  Quick start (LocalScript):
+    local StellarUI = require(game.ReplicatedStorage.StellarUI)
+    local screen    = Instance.new("ScreenGui", playerGui)
+    local ui        = StellarUI.new(screen)
+
+    local toggle = ui:Toggle({ Label = "Enable Feature", Default = false })
+    toggle.OnChanged:Connect(function(value)
+        print("Toggle is now:", value)
+    end)
+════════════════════════════════════════════════════════════════
+--]]
+
+-- ──────────────────────────────────────────────────────────────
+--  Services
+-- ──────────────────────────────────────────────────────────────
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+
+-- ──────────────────────────────────────────────────────────────
+--  Module table
+-- ──────────────────────────────────────────────────────────────
+local StellarUI   = {}
 StellarUI.__index = StellarUI
+StellarUI.Version = "1.0.0"
 
--- ============================================================
---  DESIGN TOKENS
--- ============================================================
-
+-- ──────────────────────────────────────────────────────────────
+--  DESIGN TOKENS  (edit here to retheme the entire library)
+-- ──────────────────────────────────────────────────────────────
 local Theme = {
-    -- Backgrounds
-    BG          = Color3.fromRGB(7,   7,  15),   -- deep navy black
-    Panel1      = Color3.fromRGB(13,  13,  28),
-    Panel2      = Color3.fromRGB(19,  19,  42),
-    Panel3      = Color3.fromRGB(25,  25,  52),
-
-    -- Accent colors
-    Accent      = Color3.fromRGB(123, 111, 255),  -- stellar purple
-    AccentDim   = Color3.fromRGB( 60,  53, 130),
-    Teal        = Color3.fromRGB(  0, 212, 168),  -- stellar teal
-    TealDim     = Color3.fromRGB(  0,  90,  72),
-
-    -- Semantic colors
-    Danger      = Color3.fromRGB(255,  79, 107),
-    Warning     = Color3.fromRGB(251, 191,  36),
-    Success     = Color3.fromRGB(  0, 212, 168),
-
+    -- Surfaces
+    BG        = Color3.fromRGB(  7,   7,  15),
+    Panel1    = Color3.fromRGB( 13,  13,  28),
+    Panel2    = Color3.fromRGB( 19,  19,  42),
+    Panel3    = Color3.fromRGB( 25,  25,  52),
+    -- Brand
+    Accent    = Color3.fromRGB(123, 111, 255),
+    AccentDim = Color3.fromRGB( 55,  48, 120),
+    Teal      = Color3.fromRGB(  0, 212, 168),
+    TealDim   = Color3.fromRGB(  0,  80,  65),
+    -- Semantic
+    Danger    = Color3.fromRGB(255,  79, 107),
+    Warning   = Color3.fromRGB(251, 191,  36),
+    Success   = Color3.fromRGB(  0, 212, 168),
     -- Text
-    TextPrimary = Color3.fromRGB(232, 232, 242),
-    TextSecond  = Color3.fromRGB(112, 112, 158),
-    TextMuted   = Color3.fromRGB( 64,  64,  96),
-
+    TxPrimary = Color3.fromRGB(232, 232, 242),
+    TxSecond  = Color3.fromRGB(112, 112, 158),
+    TxMuted   = Color3.fromRGB( 64,  64,  96),
     -- Borders
-    Border      = Color3.fromRGB( 50,  50, 110),  -- use at ~0.15 transparency
-    BorderHover = Color3.fromRGB( 80,  80, 160),
-
-    -- Button badge backgrounds
-    BadgeBG     = Color3.fromRGB( 30,  30,  58),
+    Border    = Color3.fromRGB( 50,  50, 110),
+    BorderHi  = Color3.fromRGB( 80,  80, 160),
+    -- Constants
+    White     = Color3.fromRGB(255, 255, 255),
 }
 
--- ============================================================
---  INTERNAL UTILITIES
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
+--  INTERNAL HELPERS
+-- ──────────────────────────────────────────────────────────────
 
-local function create(class, props, parent)
+--- Create a Roblox Instance and assign properties in one call.
+local function new(class, props, parent)
     local inst = Instance.new(class)
     for k, v in pairs(props or {}) do
         inst[k] = v
@@ -64,973 +82,131 @@ local function create(class, props, parent)
     return inst
 end
 
-local function applyCorner(parent, radius)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, radius or 8)
-    corner.Parent = parent
-    return corner
+--- Attach a UICorner to `parent`.
+local function corner(parent, radius)
+    return new("UICorner", { CornerRadius = UDim.new(0, radius or 8) }, parent)
 end
 
-local function applyPadding(parent, t, r, b, l)
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop    = UDim.new(0, t or 0)
-    pad.PaddingRight  = UDim.new(0, r or 0)
-    pad.PaddingBottom = UDim.new(0, b or 0)
-    pad.PaddingLeft   = UDim.new(0, l or 0)
-    pad.Parent = parent
-    return pad
+--- Attach a UIListLayout to `parent`.
+local function listLayout(parent, direction, gap, halign)
+    return new("UIListLayout", {
+        FillDirection       = direction or Enum.FillDirection.Vertical,
+        Padding             = UDim.new(0, gap or 0),
+        HorizontalAlignment = halign or Enum.HorizontalAlignment.Left,
+        VerticalAlignment   = Enum.VerticalAlignment.Top,
+        SortOrder           = Enum.SortOrder.LayoutOrder,
+    }, parent)
 end
 
-local function applyListLayout(parent, direction, padding, alignment)
-    local layout = Instance.new("UIListLayout")
-    layout.FillDirection      = direction or Enum.FillDirection.Vertical
-    layout.Padding            = UDim.new(0, padding or 0)
-    layout.HorizontalAlignment = alignment or Enum.HorizontalAlignment.Left
-    layout.SortOrder          = Enum.SortOrder.LayoutOrder
-    layout.Parent = parent
-    return layout
+--- Attach a UIPadding to `parent`.
+local function padding(parent, t, r, b, l)
+    return new("UIPadding", {
+        PaddingTop    = UDim.new(0, t or 0),
+        PaddingRight  = UDim.new(0, r or 0),
+        PaddingBottom = UDim.new(0, b or 0),
+        PaddingLeft   = UDim.new(0, l or 0),
+    }, parent)
 end
 
+--- Lightweight Signal — returned connection has :Disconnect().
 local function makeSignal()
-    local callbacks = {}
-    local signal = {}
-    function signal:Connect(fn)
-        table.insert(callbacks, fn)
+    local cbs = {}
+    local sig = {}
+
+    function sig:Connect(fn)
+        assert(type(fn) == "function", "[StellarUI] Signal:Connect expects a function")
+        cbs[fn] = true
         return {
             Disconnect = function()
-                for i, cb in ipairs(callbacks) do
-                    if cb == fn then table.remove(callbacks, i) break end
-                end
-            end
+                cbs[fn] = nil
+            end,
         }
     end
-    function signal:Fire(...)
-        for _, cb in ipairs(callbacks) do
-            cb(...)
+
+    function sig:Fire(...)
+        for fn in pairs(cbs) do
+            local ok, err = pcall(fn, ...)
+            if not ok then
+                warn("[StellarUI] Signal callback error:", err)
+            end
         end
     end
-    return signal
+
+    function sig:DisconnectAll()
+        cbs = {}
+    end
+
+    return sig
 end
 
-local function tween(inst, props, duration, style, direction)
+--- Tween helper.
+local function tween(inst, goals, duration, style, direction)
     local info = TweenInfo.new(
-        duration or 0.2,
+        duration  or 0.20,
         style     or Enum.EasingStyle.Quint,
         direction or Enum.EasingDirection.Out
     )
-    local tw = game:GetService("TweenService"):Create(inst, info, props)
+    local tw = TweenService:Create(inst, info, goals)
     tw:Play()
     return tw
 end
 
--- ============================================================
---  COMPONENT: Toggle
--- ============================================================
---[[
-    Options:
-        Label   : string   -- display label
-        Sub     : string   -- subtitle / description
-        Default : bool     -- initial value (default false)
-        Disabled: bool     -- lock interaction
-    Events:
-        .OnChanged:Connect(function(value: bool) end)
-    Methods:
-        :SetValue(bool)
-        :GetValue() -> bool
-        :Destroy()
---]]
-
-function StellarUI:Toggle(opts)
-    opts = opts or {}
-    local value    = opts.Default  or false
-    local disabled = opts.Disabled or false
-    local signal   = makeSignal()
-
-    -- Row container
-    local row = create("Frame", {
-        Size            = UDim2.new(1, 0, 0, 52),
-        BackgroundColor3 = Theme.Panel1,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-    }, self.Container)
-
-    -- Divider line at bottom of row
-    create("Frame", {
-        Size             = UDim2.new(1, 0, 0, 1),
-        Position         = UDim2.new(0, 0, 1, -1),
-        BackgroundColor3 = Theme.Border,
-        BackgroundTransparency = 0.75,
-        BorderSizePixel  = 0,
-    }, row)
-
-    -- Label
-    if opts.Label then
-        create("TextLabel", {
-            Size            = UDim2.new(1, -60, 0, 18),
-            Position        = UDim2.new(0, 0, 0, 10),
-            Text            = opts.Label,
-            TextColor3      = disabled and Theme.TextSecond or Theme.TextPrimary,
-            TextSize        = 14,
-            Font            = Enum.Font.GothamMedium,
-            TextXAlignment  = Enum.TextXAlignment.Left,
-            BackgroundTransparency = 1,
-        }, row)
+--- Copy text to clipboard (Studio + common executor environments).
+local function copyToClipboard(text)
+    if RunService:IsStudio() then
+        pcall(function()
+            game:GetService("StudioService"):CopyToClipboard(text)
+        end)
+        return
     end
-
-    -- Sub-label
-    if opts.Sub then
-        create("TextLabel", {
-            Size           = UDim2.new(1, -60, 0, 14),
-            Position       = UDim2.new(0, 0, 0, 30),
-            Text           = opts.Sub,
-            TextColor3     = Theme.TextMuted,
-            TextSize       = 11,
-            Font           = Enum.Font.Gotham,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            BackgroundTransparency = 1,
-        }, row)
+    -- executor fallbacks (setclipboard / toclipboard)
+    if setclipboard then
+        pcall(setclipboard, text)
+    elseif toclipboard then
+        pcall(toclipboard, text)
     end
-
-    -- Track
-    local track = create("Frame", {
-        Size             = UDim2.new(0, 44, 0, 24),
-        Position         = UDim2.new(1, -44, 0.5, -12),
-        BackgroundColor3 = value and Theme.Accent or Theme.Panel2,
-        BorderSizePixel  = 0,
-    }, row)
-    applyCorner(track, 12)
-
-    -- Track border stroke
-    local stroke = create("UIStroke", {
-        Color     = value and Theme.Accent or Theme.Border,
-        Thickness = 1,
-        Transparency = 0.4,
-    }, track)
-
-    -- Thumb
-    local thumb = create("Frame", {
-        Size             = UDim2.new(0, 18, 0, 18),
-        Position         = value and UDim2.new(0, 22, 0, 2) or UDim2.new(0, 2, 0, 2),
-        BackgroundColor3 = value and Color3.fromRGB(255,255,255) or Theme.TextSecond,
-        BorderSizePixel  = 0,
-    }, track)
-    applyCorner(thumb, 9)
-
-    -- Thumb glow
-    local glow = create("UIStroke", {
-        Color        = Theme.Accent,
-        Thickness    = 2,
-        Transparency = value and 0.4 or 1,
-    }, thumb)
-
-    -- Click button overlay
-    local btn = create("TextButton", {
-        Size               = UDim2.new(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        Text               = "",
-    }, row)
-
-    local function refresh()
-        tween(track, { BackgroundColor3 = value and Theme.Accent or Theme.Panel2 }, 0.18)
-        tween(thumb, { Position = value and UDim2.new(0, 22, 0, 2) or UDim2.new(0, 2, 0, 2) }, 0.18, Enum.EasingStyle.Back)
-        tween(thumb, { BackgroundColor3 = value and Color3.fromRGB(255,255,255) or Theme.TextSecond }, 0.18)
-        stroke.Color       = value and Theme.Accent or Theme.Border
-        glow.Transparency  = value and 0.4 or 1
-        signal:Fire(value)
-    end
-
-    btn.MouseButton1Click:Connect(function()
-        if disabled then return end
-        value = not value
-        refresh()
-    end)
-
-    local comp = {
-        Instance  = row,
-        OnChanged = signal,
-        GetValue  = function() return value end,
-        SetValue  = function(_, v)
-            value = v
-            refresh()
-        end,
-        Destroy   = function() row:Destroy() end,
-    }
-    return comp
 end
 
--- ============================================================
---  COMPONENT: Button
--- ============================================================
---[[
-    Options:
-        Text     : string   -- button label
-        Variant  : string   -- "primary"|"secondary"|"ghost"|"danger"|"success"
-        Icon     : string   -- emoji / unicode icon prefix
-        Size     : string   -- "sm"|"md"|"lg"
-        Disabled : bool
-        Width    : number   -- explicit pixel width (optional)
-    Events:
-        .OnClick:Connect(function() end)
-    Methods:
-        :SetText(string)
-        :SetDisabled(bool)
-        :Destroy()
---]]
+--- Safe string split — avoids relying on the non-standard :split() method.
+local function splitStr(str, sep)
+    local parts   = {}
+    local pattern = "([^" .. sep .. "]+)"
+    for part in str:gmatch(pattern) do
+        parts[#parts + 1] = part
+    end
+    return parts
+end
+
+--- Clamp helper.
+local function clamp(n, lo, hi)
+    return math.max(lo, math.min(hi, n))
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  SHARED STYLE TABLES
+-- ──────────────────────────────────────────────────────────────
 
 local BUTTON_STYLES = {
-    primary   = { BG = Theme.Accent,     Border = Theme.Accent,    Text = Color3.fromRGB(255,255,255) },
-    secondary = { BG = Theme.Panel2,     Border = Theme.Border,    Text = Theme.TextPrimary           },
-    ghost     = { BG = Color3.new(0,0,0), Border = Theme.Border,   Text = Theme.TextSecond            },
-    danger    = { BG = Color3.fromRGB(50,10,18), Border = Theme.Danger, Text = Theme.Danger           },
-    success   = { BG = Color3.fromRGB(0, 45, 36), Border = Theme.Teal,  Text = Theme.Teal             },
+    primary   = { BG = Theme.Accent,               Border = Theme.Accent,  Tx = Theme.White     },
+    secondary = { BG = Theme.Panel2,               Border = Theme.Border,  Tx = Theme.TxPrimary },
+    ghost     = { BG = Theme.Panel1,               Border = Theme.Border,  Tx = Theme.TxSecond  },
+    danger    = { BG = Color3.fromRGB(50, 10, 18), Border = Theme.Danger,  Tx = Theme.Danger    },
+    success   = { BG = Color3.fromRGB( 0, 40, 32), Border = Theme.Teal,    Tx = Theme.Teal      },
 }
 
 local BUTTON_SIZES = {
-    sm = { Height = 28, FontSize = 12, PadH = 14 },
-    md = { Height = 34, FontSize = 13, PadH = 18 },
-    lg = { Height = 42, FontSize = 15, PadH = 24 },
+    sm = { H = 28, FS = 12, PadH = 12 },
+    md = { H = 34, FS = 13, PadH = 18 },
+    lg = { H = 42, FS = 15, PadH = 24 },
 }
-
-function StellarUI:Button(opts)
-    opts = opts or {}
-    local style    = BUTTON_STYLES[opts.Variant or "primary"] or BUTTON_STYLES.primary
-    local size     = BUTTON_SIZES[opts.Size or "md"]          or BUTTON_SIZES.md
-    local signal   = makeSignal()
-    local disabled = opts.Disabled or false
-
-    local label = (opts.Icon and (opts.Icon .. "  ") or "") .. (opts.Text or "Button")
-    local width = opts.Width or (size.PadH * 2 + #label * (size.FontSize * 0.6))
-    width = math.max(width, 60)
-
-    local btn = create("TextButton", {
-        Size             = UDim2.new(0, width, 0, size.Height),
-        BackgroundColor3 = style.BG,
-        BackgroundTransparency = (opts.Variant == "ghost") and 1 or 0,
-        Text             = label,
-        TextColor3       = style.Text,
-        TextSize         = size.FontSize,
-        Font             = Enum.Font.GothamMedium,
-        AutoButtonColor  = false,
-        BorderSizePixel  = 0,
-    }, self.Container)
-    applyCorner(btn, 7)
-
-    create("UIStroke", {
-        Color       = style.Border,
-        Thickness   = 1,
-        Transparency = 0.3,
-    }, btn)
-
-    -- Hover / press effects
-    btn.MouseEnter:Connect(function()
-        if disabled then return end
-        tween(btn, { BackgroundTransparency = (opts.Variant == "ghost") and 0.85 or 0 }, 0.12)
-    end)
-    btn.MouseLeave:Connect(function()
-        tween(btn, { BackgroundTransparency = (opts.Variant == "ghost") and 1 or 0 }, 0.12)
-    end)
-    btn.MouseButton1Down:Connect(function()
-        if disabled then return end
-        tween(btn, { Size = UDim2.new(0, width * 0.96, 0, size.Height * 0.96) }, 0.08)
-    end)
-    btn.MouseButton1Up:Connect(function()
-        if disabled then return end
-        tween(btn, { Size = UDim2.new(0, width, 0, size.Height) }, 0.12)
-    end)
-    btn.MouseButton1Click:Connect(function()
-        if disabled then return end
-        signal:Fire()
-    end)
-
-    local comp = {
-        Instance = btn,
-        OnClick  = signal,
-        SetText  = function(_, t)
-            btn.Text = (opts.Icon and (opts.Icon .. "  ") or "") .. t
-        end,
-        SetDisabled = function(_, v)
-            disabled = v
-            btn.BackgroundTransparency = v and 0.6 or 0
-        end,
-        Destroy = function() btn:Destroy() end,
-    }
-    return comp
-end
-
--- ============================================================
---  COMPONENT: TextInput
--- ============================================================
---[[
-    Options:
-        Label       : string
-        Sub         : string
-        Placeholder : string
-        Icon        : string   -- prefix icon text
-        Default     : string   -- initial value
-        ClearOnFocus: bool
-    Events:
-        .OnChanged:Connect(function(text: string) end)
-        .OnSubmit:Connect(function(text: string) end)
-    Methods:
-        :GetValue() -> string
-        :SetValue(string)
-        :Destroy()
---]]
-
-function StellarUI:TextInput(opts)
-    opts = opts or {}
-    local signal        = makeSignal()
-    local submitSignal  = makeSignal()
-    local value         = opts.Default or ""
-
-    local wrapper = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, opts.Label and 72 or 42),
-        BackgroundTransparency = 1,
-        BorderSizePixel  = 0,
-    }, self.Container)
-
-    local yOffset = 0
-    if opts.Label then
-        create("TextLabel", {
-            Size           = UDim2.new(1, 0, 0, 18),
-            Position       = UDim2.new(0, 0, 0, 0),
-            Text           = opts.Label,
-            TextColor3     = Theme.TextPrimary,
-            TextSize       = 14,
-            Font           = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            BackgroundTransparency = 1,
-        }, wrapper)
-        if opts.Sub then
-            create("TextLabel", {
-                Size           = UDim2.new(1, 0, 0, 14),
-                Position       = UDim2.new(0, 0, 0, 18),
-                Text           = opts.Sub,
-                TextColor3     = Theme.TextMuted,
-                TextSize       = 11,
-                Font           = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                BackgroundTransparency = 1,
-            }, wrapper)
-        end
-        yOffset = opts.Sub and 36 or 22
-    end
-
-    -- Input container frame
-    local container = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, 36),
-        Position         = UDim2.new(0, 0, 0, yOffset),
-        BackgroundColor3 = Theme.Panel2,
-        BorderSizePixel  = 0,
-    }, wrapper)
-    applyCorner(container, 8)
-
-    local stroke = create("UIStroke", {
-        Color       = Theme.Border,
-        Thickness   = 1,
-        Transparency = 0.3,
-    }, container)
-
-    -- Optional icon
-    local iconW = 0
-    if opts.Icon then
-        create("TextLabel", {
-            Size           = UDim2.new(0, 26, 1, 0),
-            Position       = UDim2.new(0, 8, 0, 0),
-            Text           = opts.Icon,
-            TextColor3     = Theme.TextSecond,
-            TextSize       = 14,
-            Font           = Enum.Font.Gotham,
-            BackgroundTransparency = 1,
-        }, container)
-        iconW = 28
-    end
-
-    -- Text box
-    local textBox = create("TextBox", {
-        Size            = UDim2.new(1, -(iconW + 12), 1, 0),
-        Position        = UDim2.new(0, iconW + 8, 0, 0),
-        Text            = value,
-        PlaceholderText = opts.Placeholder or "",
-        PlaceholderColor3 = Theme.TextMuted,
-        TextColor3      = Theme.TextPrimary,
-        TextSize        = 13,
-        Font            = Enum.Font.Gotham,
-        TextXAlignment  = Enum.TextXAlignment.Left,
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ClearTextOnFocus = opts.ClearOnFocus or false,
-    }, container)
-
-    -- Focus glow
-    textBox.Focused:Connect(function()
-        tween(stroke, { Color = Theme.Accent, Transparency = 0 }, 0.15)
-        tween(container, { BackgroundColor3 = Theme.Panel3 }, 0.15)
-    end)
-    textBox.FocusLost:Connect(function(enter)
-        value = textBox.Text
-        tween(stroke, { Color = Theme.Border, Transparency = 0.3 }, 0.15)
-        tween(container, { BackgroundColor3 = Theme.Panel2 }, 0.15)
-        if enter then submitSignal:Fire(value) end
-    end)
-    textBox:GetPropertyChangedSignal("Text"):Connect(function()
-        value = textBox.Text
-        signal:Fire(value)
-    end)
-
-    local comp = {
-        Instance  = wrapper,
-        OnChanged = signal,
-        OnSubmit  = submitSignal,
-        GetValue  = function() return value end,
-        SetValue  = function(_, v) textBox.Text = v; value = v end,
-        Destroy   = function() wrapper:Destroy() end,
-    }
-    return comp
-end
-
--- ============================================================
---  COMPONENT: Slider
--- ============================================================
---[[
-    Options:
-        Label   : string
-        Sub     : string
-        Min     : number   (default 0)
-        Max     : number   (default 100)
-        Default : number   (default 0)
-        Step    : number   (default 1)
-        Unit    : string   (e.g. "%", "ms")
-    Events:
-        .OnChanged:Connect(function(value: number) end)
-    Methods:
-        :GetValue() -> number
-        :SetValue(number)
-        :Destroy()
---]]
-
-function StellarUI:Slider(opts)
-    opts        = opts or {}
-    local min   = opts.Min     or 0
-    local max   = opts.Max     or 100
-    local step  = opts.Step    or 1
-    local value = opts.Default or min
-    local unit  = opts.Unit    or ""
-    local signal = makeSignal()
-    local dragging = false
-
-    local wrapper = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, opts.Label and 68 or 36),
-        BackgroundTransparency = 1,
-        BorderSizePixel  = 0,
-    }, self.Container)
-
-    -- Header row
-    if opts.Label then
-        create("TextLabel", {
-            Size           = UDim2.new(1, -56, 0, 18),
-            Position       = UDim2.new(0, 0, 0, 0),
-            Text           = opts.Label,
-            TextColor3     = Theme.TextPrimary,
-            TextSize       = 14,
-            Font           = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            BackgroundTransparency = 1,
-        }, wrapper)
-
-        if opts.Sub then
-            create("TextLabel", {
-                Size           = UDim2.new(1, -56, 0, 14),
-                Position       = UDim2.new(0, 0, 0, 18),
-                Text           = opts.Sub,
-                TextColor3     = Theme.TextMuted,
-                TextSize       = 11,
-                Font           = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                BackgroundTransparency = 1,
-            }, wrapper)
-        end
-    end
-
-    -- Value badge
-    local badge = create("TextLabel", {
-        Size             = UDim2.new(0, 50, 0, 24),
-        Position         = UDim2.new(1, -50, 0, 0),
-        Text             = tostring(value) .. unit,
-        TextColor3       = Theme.TextPrimary,
-        TextSize         = 12,
-        Font             = Enum.Font.GothamMedium,
-        BackgroundColor3 = Theme.Panel2,
-        BorderSizePixel  = 0,
-    }, wrapper)
-    applyCorner(badge, 6)
-    create("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.3 }, badge)
-
-    local trackY = opts.Label and (opts.Sub and 46 or 32) or 10
-
-    -- Track background
-    local trackBG = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, 4),
-        Position         = UDim2.new(0, 0, 0, trackY),
-        BackgroundColor3 = Theme.Panel3,
-        BorderSizePixel  = 0,
-    }, wrapper)
-    applyCorner(trackBG, 2)
-
-    -- Fill bar
-    local fill = create("Frame", {
-        Size             = UDim2.new((value - min) / (max - min), 0, 1, 0),
-        BackgroundColor3 = Theme.Accent,
-        BorderSizePixel  = 0,
-    }, trackBG)
-    applyCorner(fill, 2)
-
-    -- Thumb
-    local thumb = create("Frame", {
-        Size             = UDim2.new(0, 16, 0, 16),
-        Position         = UDim2.new((value - min) / (max - min), -8, 0, trackY - 6),
-        BackgroundColor3 = Theme.Accent,
-        BorderSizePixel  = 0,
-        ZIndex           = 5,
-    }, wrapper)
-    applyCorner(thumb, 8)
-    create("UIStroke", { Color = Theme.Accent, Thickness = 2, Transparency = 0.5 }, thumb)
-
-    -- Invisible drag button over entire track
-    local hitbox = create("TextButton", {
-        Size               = UDim2.new(1, 0, 0, 20),
-        Position           = UDim2.new(0, 0, 0, trackY - 8),
-        BackgroundTransparency = 1,
-        Text               = "",
-        ZIndex             = 10,
-    }, wrapper)
-
-    local function updateValue(input)
-        local relX = (input.Position.X - hitbox.AbsolutePosition.X) / hitbox.AbsoluteSize.X
-        relX = math.clamp(relX, 0, 1)
-        local raw = min + relX * (max - min)
-        local stepped = math.round(raw / step) * step
-        stepped = math.clamp(stepped, min, max)
-        value = stepped
-
-        local pct = (value - min) / (max - min)
-        fill.Size     = UDim2.new(pct, 0, 1, 0)
-        thumb.Position = UDim2.new(pct, -8, 0, trackY - 6)
-        badge.Text    = tostring(value) .. unit
-        signal:Fire(value)
-    end
-
-    hitbox.MouseButton1Down:Connect(function(x, y)
-        dragging = true
-        updateValue({ Position = Vector2.new(x, y) })
-    end)
-
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateValue(input)
-        end
-    end)
-
-    game:GetService("UserInputService").InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-
-    local comp = {
-        Instance  = wrapper,
-        OnChanged = signal,
-        GetValue  = function() return value end,
-        SetValue  = function(_, v)
-            value = math.clamp(v, min, max)
-            local pct = (value - min) / (max - min)
-            fill.Size      = UDim2.new(pct, 0, 1, 0)
-            thumb.Position = UDim2.new(pct, -8, 0, trackY - 6)
-            badge.Text     = tostring(value) .. unit
-        end,
-        Destroy   = function() wrapper:Destroy() end,
-    }
-    return comp
-end
-
--- ============================================================
---  COMPONENT: Select (Dropdown)
--- ============================================================
---[[
-    Options:
-        Label   : string
-        Sub     : string
-        Options : table    -- { "Option A", "Option B", ... }
-        Default : string   -- initial selection
-    Events:
-        .OnChanged:Connect(function(selected: string) end)
-    Methods:
-        :GetValue() -> string
-        :SetValue(string)
-        :Destroy()
---]]
-
-function StellarUI:Select(opts)
-    opts = opts or {}
-    local options  = opts.Options or { "Option 1", "Option 2" }
-    local selected = opts.Default or options[1]
-    local signal   = makeSignal()
-    local isOpen   = false
-
-    local wrapper = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, opts.Label and 70 or 40),
-        BackgroundTransparency = 1,
-        ClipsDescendants = false,
-        BorderSizePixel  = 0,
-        ZIndex           = 20,
-    }, self.Container)
-
-    local yOff = 0
-    if opts.Label then
-        create("TextLabel", {
-            Size           = UDim2.new(1, 0, 0, 18),
-            Text           = opts.Label,
-            TextColor3     = Theme.TextPrimary,
-            TextSize       = 14,
-            Font           = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            BackgroundTransparency = 1,
-        }, wrapper)
-        yOff = opts.Sub and 36 or 22
-        if opts.Sub then
-            create("TextLabel", {
-                Size           = UDim2.new(1, 0, 0, 14),
-                Position       = UDim2.new(0, 0, 0, 18),
-                Text           = opts.Sub,
-                TextColor3     = Theme.TextMuted,
-                TextSize       = 11,
-                Font           = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                BackgroundTransparency = 1,
-            }, wrapper)
-        end
-    end
-
-    -- Main display
-    local display = create("TextButton", {
-        Size             = UDim2.new(1, 0, 0, 34),
-        Position         = UDim2.new(0, 0, 0, yOff),
-        BackgroundColor3 = Theme.Panel2,
-        Text             = "",
-        BorderSizePixel  = 0,
-        AutoButtonColor  = false,
-        ZIndex           = 20,
-    }, wrapper)
-    applyCorner(display, 8)
-
-    local stroke = create("UIStroke", {
-        Color       = Theme.Border,
-        Thickness   = 1,
-        Transparency = 0.3,
-    }, display)
-
-    create("TextLabel", {
-        Name           = "ValueLabel",
-        Size           = UDim2.new(1, -30, 1, 0),
-        Position       = UDim2.new(0, 12, 0, 0),
-        Text           = selected,
-        TextColor3     = Theme.TextPrimary,
-        TextSize       = 13,
-        Font           = Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        BackgroundTransparency = 1,
-        ZIndex         = 21,
-    }, display)
-
-    local arrow = create("TextLabel", {
-        Size           = UDim2.new(0, 20, 1, 0),
-        Position       = UDim2.new(1, -24, 0, 0),
-        Text           = "▾",
-        TextColor3     = Theme.TextSecond,
-        TextSize       = 12,
-        Font           = Enum.Font.Gotham,
-        BackgroundTransparency = 1,
-        ZIndex         = 21,
-    }, display)
-
-    -- Dropdown panel
-    local dropHeight = #options * 34
-    local dropdown = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, dropHeight),
-        Position         = UDim2.new(0, 0, 0, yOff + 38),
-        BackgroundColor3 = Theme.Panel3,
-        Visible          = false,
-        ClipsDescendants = true,
-        BorderSizePixel  = 0,
-        ZIndex           = 50,
-    }, wrapper)
-    applyCorner(dropdown, 8)
-    create("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.3 }, dropdown)
-
-    local function closeDropdown()
-        isOpen = false
-        dropdown.Visible = false
-        tween(stroke, { Color = Theme.Border }, 0.15)
-        tween(arrow, { Rotation = 0 }, 0.2)
-    end
-
-    local function openDropdown()
-        isOpen = true
-        dropdown.Visible = true
-        tween(stroke, { Color = Theme.Accent }, 0.15)
-        tween(arrow, { Rotation = 180 }, 0.2)
-    end
-
-    -- Build options
-    for i, opt in ipairs(options) do
-        local item = create("TextButton", {
-            Size             = UDim2.new(1, 0, 0, 34),
-            Position         = UDim2.new(0, 0, 0, (i - 1) * 34),
-            BackgroundColor3 = opt == selected and Theme.Panel2 or Theme.Panel3,
-            BackgroundTransparency = opt == selected and 0 or 0,
-            Text             = (opt == selected and "✓  " or "    ") .. opt,
-            TextColor3       = opt == selected and Theme.Accent or Theme.TextPrimary,
-            TextSize         = 13,
-            Font             = Enum.Font.Gotham,
-            TextXAlignment   = Enum.TextXAlignment.Left,
-            AutoButtonColor  = false,
-            BorderSizePixel  = 0,
-            ZIndex           = 51,
-        }, dropdown)
-        applyPadding(item, 0, 0, 0, 12)
-
-        item.MouseEnter:Connect(function()
-            if opt ~= selected then
-                tween(item, { BackgroundColor3 = Theme.Panel2 }, 0.12)
-            end
-        end)
-        item.MouseLeave:Connect(function()
-            if opt ~= selected then
-                tween(item, { BackgroundColor3 = Theme.Panel3 }, 0.12)
-            end
-        end)
-        item.MouseButton1Click:Connect(function()
-            selected = opt
-            display:FindFirstChild("ValueLabel").Text = opt
-            closeDropdown()
-            -- Refresh text/colors
-            for _, child in ipairs(dropdown:GetChildren()) do
-                if child:IsA("TextButton") then
-                    local isMatch = child.Text:match(opt .. "$") ~= nil
-                    child.TextColor3       = isMatch and Theme.Accent or Theme.TextPrimary
-                    child.BackgroundColor3 = isMatch and Theme.Panel2 or Theme.Panel3
-                end
-            end
-            signal:Fire(selected)
-        end)
-    end
-
-    display.MouseButton1Click:Connect(function()
-        if isOpen then closeDropdown() else openDropdown() end
-    end)
-
-    local comp = {
-        Instance  = wrapper,
-        OnChanged = signal,
-        GetValue  = function() return selected end,
-        SetValue  = function(_, v)
-            selected = v
-            display:FindFirstChild("ValueLabel").Text = v
-        end,
-        Destroy   = function() wrapper:Destroy() end,
-    }
-    return comp
-end
-
--- ============================================================
---  COMPONENT: CodeBlock
--- ============================================================
---[[
-    Options:
-        Code     : string   -- the code text to display
-        Language : string   -- label shown in header (e.g. "lua")
-        Height   : number   -- explicit height in px (default 120)
-    Methods:
-        :SetCode(string)
-        :Destroy()
---]]
-
-function StellarUI:CodeBlock(opts)
-    opts = opts or {}
-    local code = opts.Code or "-- your code here"
-
-    local wrapper = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, (opts.Height or 120) + 36),
-        BackgroundColor3 = Theme.Panel1,
-        BorderSizePixel  = 0,
-    }, self.Container)
-    applyCorner(wrapper, 8)
-    create("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.3 }, wrapper)
-
-    -- Header bar
-    local header = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, 34),
-        BackgroundColor3 = Theme.Panel2,
-        BorderSizePixel  = 0,
-        ZIndex           = 2,
-    }, wrapper)
-    applyCorner(header, 8)
-
-    -- Dots
-    local dotColors = {
-        Color3.fromRGB(255,95,87),
-        Color3.fromRGB(255,189,46),
-        Color3.fromRGB(40,200,64),
-    }
-    for i, c in ipairs(dotColors) do
-        create("Frame", {
-            Size             = UDim2.new(0, 9, 0, 9),
-            Position         = UDim2.new(0, 8 + (i - 1) * 14, 0.5, -4),
-            BackgroundColor3 = c,
-            BorderSizePixel  = 0,
-            ZIndex           = 3,
-        }, header)
-        -- apply corner to each dot
-        local dot = header:GetChildren()[#header:GetChildren()]
-        applyCorner(dot, 5)
-    end
-
-    -- Language label
-    create("TextLabel", {
-        Size           = UDim2.new(0, 60, 1, 0),
-        Position       = UDim2.new(0, 54, 0, 0),
-        Text           = opts.Language or "lua",
-        TextColor3     = Theme.TextSecond,
-        TextSize       = 11,
-        Font           = Enum.Font.Code,
-        BackgroundTransparency = 1,
-        ZIndex         = 3,
-    }, header)
-
-    -- Copy button
-    local copyBtn = create("TextButton", {
-        Size             = UDim2.new(0, 54, 0, 22),
-        Position         = UDim2.new(1, -62, 0.5, -11),
-        Text             = "⎘ Copy",
-        TextColor3       = Theme.TextSecond,
-        TextSize         = 11,
-        Font             = Enum.Font.GothamMedium,
-        BackgroundColor3 = Theme.Panel1,
-        AutoButtonColor  = false,
-        BorderSizePixel  = 0,
-        ZIndex           = 3,
-    }, header)
-    applyCorner(copyBtn, 5)
-    create("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.3 }, copyBtn)
-
-    copyBtn.MouseButton1Click:Connect(function()
-        -- Roblox clipboard (Studio only)
-        pcall(function()
-            game:GetService("StudioService"):CopyToClipboard(code)
-        end)
-        copyBtn.Text      = "✓ Copied"
-        copyBtn.TextColor3 = Theme.Teal
-        task.delay(2, function()
-            copyBtn.Text       = "⎘ Copy"
-            copyBtn.TextColor3 = Theme.TextSecond
-        end)
-    end)
-
-    -- Code text
-    local codeLabel = create("TextLabel", {
-        Size           = UDim2.new(1, 0, 1, -36),
-        Position       = UDim2.new(0, 0, 0, 36),
-        Text           = code,
-        TextColor3     = Theme.TextPrimary,
-        TextSize       = 12,
-        Font           = Enum.Font.Code,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        BackgroundTransparency = 1,
-        TextWrapped    = false,
-        RichText       = false,
-        ZIndex         = 2,
-    }, wrapper)
-    applyPadding(codeLabel, 10, 12, 10, 14)
-
-    local comp = {
-        Instance = wrapper,
-        SetCode  = function(_, c)
-            code = c
-            codeLabel.Text = c
-        end,
-        Destroy  = function() wrapper:Destroy() end,
-    }
-    return comp
-end
-
--- ============================================================
---  COMPONENT: Badge
--- ============================================================
---[[
-    Options:
-        Text    : string
-        Variant : "default"|"accent"|"success"|"danger"|"warning"
-    Methods:
-        :SetText(string)
-        :Destroy()
---]]
 
 local BADGE_STYLES = {
-    default = { BG = Theme.Panel3,  Text = Theme.TextSecond  },
-    accent  = { BG = Theme.AccentDim, Text = Theme.Accent    },
-    success = { BG = Theme.TealDim, Text = Theme.Teal         },
-    danger  = { BG = Color3.fromRGB(50,10,18), Text = Theme.Danger   },
-    warning = { BG = Color3.fromRGB(50,38,0),  Text = Theme.Warning  },
+    default = { BG = Theme.Panel3,                      Tx = Theme.TxSecond },
+    accent  = { BG = Theme.AccentDim,                   Tx = Theme.Accent   },
+    success = { BG = Theme.TealDim,                     Tx = Theme.Teal     },
+    danger  = { BG = Color3.fromRGB(50, 10, 18),        Tx = Theme.Danger   },
+    warning = { BG = Color3.fromRGB(50, 38,  0),        Tx = Theme.Warning  },
 }
-
-function StellarUI:Badge(opts)
-    opts = opts or {}
-    local style = BADGE_STYLES[opts.Variant or "default"] or BADGE_STYLES.default
-    local text  = opts.Text or "Badge"
-    local w     = math.max(#text * 7 + 16, 40)
-
-    local frame = create("Frame", {
-        Size             = UDim2.new(0, w, 0, 20),
-        BackgroundColor3 = style.BG,
-        BorderSizePixel  = 0,
-    }, self.Container)
-    applyCorner(frame, 5)
-
-    local lbl = create("TextLabel", {
-        Size           = UDim2.new(1, 0, 1, 0),
-        Text           = text,
-        TextColor3     = style.Text,
-        TextSize       = 11,
-        Font           = Enum.Font.GothamMedium,
-        BackgroundTransparency = 1,
-    }, frame)
-
-    local comp = {
-        Instance = frame,
-        SetText  = function(_, t)
-            lbl.Text  = t
-            frame.Size = UDim2.new(0, math.max(#t * 7 + 16, 40), 0, 20)
-        end,
-        Destroy  = function() frame:Destroy() end,
-    }
-    return comp
-end
-
--- ============================================================
---  COMPONENT: ProgressBar
--- ============================================================
---[[
-    Options:
-        Label   : string
-        Value   : number   (0–100)
-        Max     : number   (default 100)
-        Variant : "accent"|"success"|"danger"|"warning"
-    Methods:
-        :SetValue(number)
-        :GetValue() -> number
-        :Destroy()
---]]
 
 local PROGRESS_COLORS = {
     accent  = Theme.Accent,
@@ -1039,465 +215,1387 @@ local PROGRESS_COLORS = {
     warning = Theme.Warning,
 }
 
-function StellarUI:ProgressBar(opts)
-    opts    = opts or {}
-    local max   = opts.Max   or 100
-    local value = math.clamp(opts.Value or 0, 0, max)
-    local color = PROGRESS_COLORS[opts.Variant or "accent"] or Theme.Accent
+local STATUS_COLORS = {
+    online  = Color3.fromRGB(34, 197, 94),
+    away    = Theme.Warning,
+    busy    = Theme.Danger,
+    offline = Theme.TxSecond,
+}
 
-    local wrapper = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, opts.Label and 36 or 14),
+local NOTIF_STYLES = {
+    info    = { Icon = "i",  Color = Theme.Accent  },
+    success = { Icon = "ok", Color = Theme.Teal    },
+    danger  = { Icon = "x",  Color = Theme.Danger  },
+    warning = { Icon = "!",  Color = Theme.Warning },
+}
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: Toggle
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Label    string   display label
+        Sub      string   sub-label / description
+        Default  bool     initial state            [false]
+        Disabled bool     prevent interaction      [false]
+
+    Returns:
+        .OnChanged : Signal<bool>
+        :GetValue() -> bool
+        :SetValue(bool)
+        :SetDisabled(bool)
+        :Destroy()
+--]]
+function StellarUI:Toggle(opts)
+    opts = opts or {}
+    local value    = opts.Default  == true
+    local disabled = opts.Disabled == true
+    local signal   = makeSignal()
+
+    local row = new("Frame", {
+        Size                   = UDim2.new(1, 0, 0, 54),
         BackgroundTransparency = 1,
-        BorderSizePixel  = 0,
-    }, self.Container)
+        BorderSizePixel        = 0,
+    }, self._inner)
 
-    local pctLabel
+    -- Bottom divider
+    new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 1),
+        Position         = UDim2.new(0, 0, 1, -1),
+        BackgroundColor3 = Theme.Border,
+        BackgroundTransparency = 0.70,
+        BorderSizePixel  = 0,
+    }, row)
+
     if opts.Label then
-        create("TextLabel", {
-            Size           = UDim2.new(1, -50, 0, 16),
-            Text           = opts.Label,
-            TextColor3     = Theme.TextPrimary,
-            TextSize       = 13,
-            Font           = Enum.Font.Gotham,
-            TextXAlignment = Enum.TextXAlignment.Left,
+        new("TextLabel", {
+            Size                   = UDim2.new(1, -60, 0, 18),
+            Position               = UDim2.new(0, 0, 0, 10),
+            Text                   = opts.Label,
+            TextColor3             = disabled and Theme.TxSecond or Theme.TxPrimary,
+            TextSize               = 14,
+            Font                   = Enum.Font.GothamMedium,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+        }, row)
+    end
+
+    if opts.Sub then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, -60, 0, 14),
+            Position               = UDim2.new(0, 0, 0, 30),
+            Text                   = opts.Sub,
+            TextColor3             = Theme.TxMuted,
+            TextSize               = 11,
+            Font                   = Enum.Font.Gotham,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+        }, row)
+    end
+
+    local track = new("Frame", {
+        Size             = UDim2.new(0, 44, 0, 24),
+        Position         = UDim2.new(1, -44, 0.5, -12),
+        BackgroundColor3 = value and Theme.Accent or Theme.Panel2,
+        BorderSizePixel  = 0,
+    }, row)
+    corner(track, 12)
+
+    local trackStroke = new("UIStroke", {
+        Color        = value and Theme.Accent or Theme.Border,
+        Thickness    = 1,
+        Transparency = 0.35,
+    }, track)
+
+    local thumb = new("Frame", {
+        Size             = UDim2.new(0, 18, 0, 18),
+        Position         = value and UDim2.new(0, 22, 0, 2) or UDim2.new(0, 2, 0, 2),
+        BackgroundColor3 = value and Theme.White or Theme.TxSecond,
+        BorderSizePixel  = 0,
+    }, track)
+    corner(thumb, 9)
+
+    local thumbGlow = new("UIStroke", {
+        Color        = Theme.Accent,
+        Thickness    = 2,
+        Transparency = value and 0.35 or 1,
+    }, thumb)
+
+    local hitbox = new("TextButton", {
+        Size                   = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text                   = "",
+    }, row)
+
+    local function refresh()
+        tween(track, { BackgroundColor3 = value and Theme.Accent or Theme.Panel2 }, 0.18)
+        tween(thumb, {
+            Position         = value and UDim2.new(0, 22, 0, 2) or UDim2.new(0, 2, 0, 2),
+            BackgroundColor3 = value and Theme.White or Theme.TxSecond,
+        }, 0.18, Enum.EasingStyle.Back)
+        trackStroke.Color    = value and Theme.Accent or Theme.Border
+        thumbGlow.Transparency = value and 0.35 or 1
+        signal:Fire(value)
+    end
+
+    hitbox.MouseButton1Click:Connect(function()
+        if disabled then return end
+        value = not value
+        refresh()
+    end)
+
+    local comp = {}
+    comp.OnChanged   = signal
+    comp.GetValue    = function() return value end
+    comp.SetValue    = function(_, v) value = (v == true); refresh() end
+    comp.SetDisabled = function(_, v) disabled = (v == true) end
+    comp.Destroy     = function() row:Destroy() end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: Button
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Text     string   button label             ["Button"]
+        Variant  string   primary|secondary|ghost|danger|success  ["primary"]
+        Icon     string   prefix text/emoji
+        Size     string   sm|md|lg                 ["md"]
+        Disabled bool                              [false]
+        Width    number   explicit pixel width
+
+    Returns:
+        .OnClick : Signal<>
+        :SetText(string)
+        :SetDisabled(bool)
+        :Destroy()
+--]]
+function StellarUI:Button(opts)
+    opts = opts or {}
+    local style    = BUTTON_STYLES[opts.Variant or "primary"] or BUTTON_STYLES.primary
+    local sz       = BUTTON_SIZES [opts.Size    or "md"     ] or BUTTON_SIZES.md
+    local disabled = opts.Disabled == true
+    local signal   = makeSignal()
+    local isGhost  = opts.Variant  == "ghost"
+
+    local labelTx = (opts.Icon and (opts.Icon .. "  ") or "") .. (opts.Text or "Button")
+    local w = opts.Width or clamp(#labelTx * (sz.FS * 0.62) + sz.PadH * 2, 60, 300)
+
+    local btn = new("TextButton", {
+        Size                   = UDim2.new(0, w, 0, sz.H),
+        BackgroundColor3       = style.BG,
+        BackgroundTransparency = isGhost and 0.92 or 0,
+        Text                   = labelTx,
+        TextColor3             = disabled and Theme.TxMuted or style.Tx,
+        TextSize               = sz.FS,
+        Font                   = Enum.Font.GothamMedium,
+        AutoButtonColor        = false,
+        BorderSizePixel        = 0,
+    }, self._inner)
+    corner(btn, 7)
+
+    new("UIStroke", {
+        Color        = style.Border,
+        Thickness    = 1,
+        Transparency = disabled and 0.70 or 0.25,
+    }, btn)
+
+    if not disabled then
+        btn.MouseEnter:Connect(function()
+            tween(btn, { BackgroundTransparency = isGhost and 0.75 or 0.12 }, 0.12)
+        end)
+        btn.MouseLeave:Connect(function()
+            tween(btn, { BackgroundTransparency = isGhost and 0.92 or 0 }, 0.15)
+        end)
+        btn.MouseButton1Down:Connect(function()
+            tween(btn, { Size = UDim2.new(0, w * 0.96, 0, sz.H * 0.94) }, 0.08)
+        end)
+        btn.MouseButton1Up:Connect(function()
+            tween(btn, { Size = UDim2.new(0, w, 0, sz.H) }, 0.14, Enum.EasingStyle.Back)
+        end)
+        btn.MouseButton1Click:Connect(function()
+            signal:Fire()
+        end)
+    end
+
+    local comp = {}
+    comp.OnClick     = signal
+    comp.SetText     = function(_, t)
+        btn.Text = (opts.Icon and (opts.Icon .. "  ") or "") .. t
+    end
+    comp.SetDisabled = function(_, v)
+        disabled = (v == true)
+        btn.BackgroundTransparency = disabled and 0.6 or (isGhost and 0.92 or 0)
+    end
+    comp.Destroy     = function() btn:Destroy() end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: TextInput
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Label        string
+        Sub          string
+        Placeholder  string
+        Icon         string   prefix glyph
+        Default      string   initial text
+        MaxLength    number
+        ClearOnFocus bool
+
+    Returns:
+        .OnChanged : Signal<string>
+        .OnSubmit  : Signal<string>   fires when Enter is pressed
+        :GetValue() -> string
+        :SetValue(string)
+        :Destroy()
+--]]
+function StellarUI:TextInput(opts)
+    opts = opts or {}
+    local value     = opts.Default or ""
+    local signal    = makeSignal()
+    local submitSig = makeSignal()
+    local hasLabel  = opts.Label ~= nil
+    local hasSub    = opts.Sub   ~= nil
+    local yOff      = hasLabel and (hasSub and 36 or 22) or 0
+    local totalH    = yOff + 42
+
+    local wrapper = new("Frame", {
+        Size                   = UDim2.new(1, 0, 0, totalH),
+        BackgroundTransparency = 1,
+        BorderSizePixel        = 0,
+    }, self._inner)
+
+    if hasLabel then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 0, 18),
+            Text                   = opts.Label,
+            TextColor3             = Theme.TxPrimary,
+            TextSize               = 14,
+            Font                   = Enum.Font.GothamMedium,
+            TextXAlignment         = Enum.TextXAlignment.Left,
             BackgroundTransparency = 1,
         }, wrapper)
-        pctLabel = create("TextLabel", {
-            Size           = UDim2.new(0, 48, 0, 16),
-            Position       = UDim2.new(1, -48, 0, 0),
-            Text           = math.round(value / max * 100) .. "%",
-            TextColor3     = Theme.TextSecond,
-            TextSize       = 11,
-            Font           = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Right,
+    end
+    if hasSub then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 0, 14),
+            Position               = UDim2.new(0, 0, 0, 18),
+            Text                   = opts.Sub,
+            TextColor3             = Theme.TxMuted,
+            TextSize               = 11,
+            Font                   = Enum.Font.Gotham,
+            TextXAlignment         = Enum.TextXAlignment.Left,
             BackgroundTransparency = 1,
         }, wrapper)
     end
 
-    local trackY = opts.Label and 22 or 4
-    local track = create("Frame", {
+    local box = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 36),
+        Position         = UDim2.new(0, 0, 0, yOff),
+        BackgroundColor3 = Theme.Panel2,
+        BorderSizePixel  = 0,
+    }, wrapper)
+    corner(box, 8)
+
+    local stroke = new("UIStroke", {
+        Color        = Theme.Border,
+        Thickness    = 1,
+        Transparency = 0.30,
+    }, box)
+
+    local iconPad = 0
+    if opts.Icon then
+        new("TextLabel", {
+            Size                   = UDim2.new(0, 28, 1, 0),
+            Position               = UDim2.new(0, 7, 0, 0),
+            Text                   = opts.Icon,
+            TextColor3             = Theme.TxSecond,
+            TextSize               = 14,
+            Font                   = Enum.Font.Gotham,
+            BackgroundTransparency = 1,
+        }, box)
+        iconPad = 30
+    end
+
+    local tb = new("TextBox", {
+        Size                   = UDim2.new(1, -(iconPad + 16), 1, 0),
+        Position               = UDim2.new(0, iconPad + 8, 0, 0),
+        Text                   = value,
+        PlaceholderText        = opts.Placeholder or "",
+        PlaceholderColor3      = Theme.TxMuted,
+        TextColor3             = Theme.TxPrimary,
+        TextSize               = 13,
+        Font                   = Enum.Font.Gotham,
+        TextXAlignment         = Enum.TextXAlignment.Left,
+        BackgroundTransparency = 1,
+        BorderSizePixel        = 0,
+        ClearTextOnFocus       = opts.ClearOnFocus == true,
+    }, box)
+
+    tb.Focused:Connect(function()
+        tween(stroke, { Color = Theme.Accent, Transparency = 0 }, 0.15)
+        tween(box, { BackgroundColor3 = Theme.Panel3 }, 0.15)
+    end)
+
+    tb.FocusLost:Connect(function(didEnter)
+        value = tb.Text
+        tween(stroke, { Color = Theme.Border, Transparency = 0.30 }, 0.15)
+        tween(box, { BackgroundColor3 = Theme.Panel2 }, 0.15)
+        if didEnter then submitSig:Fire(value) end
+    end)
+
+    tb:GetPropertyChangedSignal("Text"):Connect(function()
+        value = tb.Text
+        signal:Fire(value)
+    end)
+
+    local comp = {}
+    comp.OnChanged = signal
+    comp.OnSubmit  = submitSig
+    comp.GetValue  = function() return value end
+    comp.SetValue  = function(_, v)
+        tb.Text = tostring(v)
+        value   = tb.Text
+    end
+    comp.Destroy   = function() wrapper:Destroy() end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: Slider
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Label    string
+        Sub      string
+        Min      number  [0]
+        Max      number  [100]
+        Default  number  [Min]
+        Step     number  [1]
+        Unit     string  suffix e.g. "%"
+
+    Returns:
+        .OnChanged : Signal<number>
+        :GetValue() -> number
+        :SetValue(number)
+        :Destroy()
+--]]
+function StellarUI:Slider(opts)
+    opts     = opts or {}
+    local lo = opts.Min     or 0
+    local hi = opts.Max     or 100
+    local st = opts.Step    or 1
+    local v  = clamp(opts.Default or lo, lo, hi)
+    local un = opts.Unit    or ""
+    local signal = makeSignal()
+    local isDrag = false
+
+    local hasLabel = opts.Label ~= nil
+    local hasSub   = opts.Sub   ~= nil
+    local totalH   = hasLabel and (hasSub and 72 or 56) or 32
+
+    local wrapper = new("Frame", {
+        Size                   = UDim2.new(1, 0, 0, totalH),
+        BackgroundTransparency = 1,
+        BorderSizePixel        = 0,
+    }, self._inner)
+
+    if hasLabel then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, -60, 0, 18),
+            Text                   = opts.Label,
+            TextColor3             = Theme.TxPrimary,
+            TextSize               = 14,
+            Font                   = Enum.Font.GothamMedium,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+        }, wrapper)
+    end
+    if hasSub then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, -60, 0, 14),
+            Position               = UDim2.new(0, 0, 0, 20),
+            Text                   = opts.Sub,
+            TextColor3             = Theme.TxMuted,
+            TextSize               = 11,
+            Font                   = Enum.Font.Gotham,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+        }, wrapper)
+    end
+
+    local badge = new("TextLabel", {
+        Size             = UDim2.new(0, 52, 0, 24),
+        Position         = UDim2.new(1, -52, 0, hasLabel and 0 or 4),
+        Text             = tostring(v) .. un,
+        TextColor3       = Theme.TxPrimary,
+        TextSize         = 12,
+        Font             = Enum.Font.GothamMedium,
+        BackgroundColor3 = Theme.Panel2,
+        BorderSizePixel  = 0,
+    }, wrapper)
+    corner(badge, 6)
+    new("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.30 }, badge)
+
+    local trackY = hasLabel and (hasSub and 50 or 36) or 12
+
+    local trackBG = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 4),
+        Position         = UDim2.new(0, 0, 0, trackY),
+        BackgroundColor3 = Theme.Panel3,
+        BorderSizePixel  = 0,
+    }, wrapper)
+    corner(trackBG, 2)
+
+    local fill = new("Frame", {
+        Size             = UDim2.new((v - lo) / (hi - lo), 0, 1, 0),
+        BackgroundColor3 = Theme.Accent,
+        BorderSizePixel  = 0,
+    }, trackBG)
+    corner(fill, 2)
+
+    local thumb = new("Frame", {
+        Size             = UDim2.new(0, 16, 0, 16),
+        Position         = UDim2.new((v - lo) / (hi - lo), -8, 0, trackY - 6),
+        BackgroundColor3 = Theme.Accent,
+        BorderSizePixel  = 0,
+        ZIndex           = 4,
+    }, wrapper)
+    corner(thumb, 8)
+    new("UIStroke", { Color = Theme.Accent, Thickness = 2, Transparency = 0.45 }, thumb)
+
+    local hitbox = new("TextButton", {
+        Size                   = UDim2.new(1, 0, 0, 24),
+        Position               = UDim2.new(0, 0, 0, trackY - 10),
+        BackgroundTransparency = 1,
+        Text                   = "",
+        ZIndex                 = 8,
+    }, wrapper)
+
+    local function applyValue(pct)
+        pct   = clamp(pct, 0, 1)
+        local raw     = lo + pct * (hi - lo)
+        local stepped = math.round(raw / st) * st
+        v             = clamp(stepped, lo, hi)
+        local p       = (v - lo) / (hi - lo)
+        fill.Size      = UDim2.new(p, 0, 1, 0)
+        thumb.Position = UDim2.new(p, -8, 0, trackY - 6)
+        badge.Text     = tostring(v) .. un
+        signal:Fire(v)
+    end
+
+    hitbox.MouseButton1Down:Connect(function(x, _y)
+        isDrag = true
+        applyValue((x - hitbox.AbsolutePosition.X) / hitbox.AbsoluteSize.X)
+    end)
+
+    local moveConn = UserInputService.InputChanged:Connect(function(input)
+        if isDrag and input.UserInputType == Enum.UserInputType.MouseMovement then
+            applyValue((input.Position.X - hitbox.AbsolutePosition.X) / hitbox.AbsoluteSize.X)
+        end
+    end)
+
+    local upConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDrag = false
+        end
+    end)
+
+    local comp = {}
+    comp.OnChanged = signal
+    comp.GetValue  = function() return v end
+    comp.SetValue  = function(_, val)
+        applyValue((clamp(val, lo, hi) - lo) / (hi - lo))
+    end
+    comp.Destroy   = function()
+        moveConn:Disconnect()
+        upConn:Disconnect()
+        wrapper:Destroy()
+    end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: Select (Dropdown)
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Label    string
+        Sub      string
+        Options  table    { "A", "B", "C" }
+        Default  string   initial selection
+
+    Returns:
+        .OnChanged : Signal<string>
+        :GetValue() -> string
+        :SetValue(string)
+        :Destroy()
+--]]
+function StellarUI:Select(opts)
+    opts = opts or {}
+    local items    = opts.Options or { "Option 1", "Option 2" }
+    local selected = opts.Default or items[1]
+    local signal   = makeSignal()
+    local isOpen   = false
+
+    local hasLabel = opts.Label ~= nil
+    local hasSub   = opts.Sub   ~= nil
+    local yOff     = hasLabel and (hasSub and 36 or 22) or 0
+    local wrapH    = yOff + 36
+
+    local wrapper = new("Frame", {
+        Size                   = UDim2.new(1, 0, 0, wrapH),
+        BackgroundTransparency = 1,
+        ClipsDescendants       = false,
+        BorderSizePixel        = 0,
+        ZIndex                 = 10,
+    }, self._inner)
+
+    if hasLabel then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 0, 18),
+            Text                   = opts.Label,
+            TextColor3             = Theme.TxPrimary,
+            TextSize               = 14,
+            Font                   = Enum.Font.GothamMedium,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+            ZIndex                 = 11,
+        }, wrapper)
+    end
+    if hasSub then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 0, 14),
+            Position               = UDim2.new(0, 0, 0, 18),
+            Text                   = opts.Sub,
+            TextColor3             = Theme.TxMuted,
+            TextSize               = 11,
+            Font                   = Enum.Font.Gotham,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+            ZIndex                 = 11,
+        }, wrapper)
+    end
+
+    local display = new("TextButton", {
+        Size                   = UDim2.new(1, 0, 0, 34),
+        Position               = UDim2.new(0, 0, 0, yOff),
+        BackgroundColor3       = Theme.Panel2,
+        AutoButtonColor        = false,
+        Text                   = "",
+        BorderSizePixel        = 0,
+        ZIndex                 = 11,
+    }, wrapper)
+    corner(display, 8)
+
+    local dStroke = new("UIStroke", {
+        Color        = Theme.Border,
+        Thickness    = 1,
+        Transparency = 0.30,
+    }, display)
+
+    local valueLabel = new("TextLabel", {
+        Size                   = UDim2.new(1, -30, 1, 0),
+        Position               = UDim2.new(0, 12, 0, 0),
+        Text                   = selected,
+        TextColor3             = Theme.TxPrimary,
+        TextSize               = 13,
+        Font                   = Enum.Font.Gotham,
+        TextXAlignment         = Enum.TextXAlignment.Left,
+        BackgroundTransparency = 1,
+        ZIndex                 = 12,
+    }, display)
+
+    local arrow = new("TextLabel", {
+        Size                   = UDim2.new(0, 22, 1, 0),
+        Position               = UDim2.new(1, -24, 0, 0),
+        Text                   = "v",
+        TextColor3             = Theme.TxSecond,
+        TextSize               = 10,
+        Font                   = Enum.Font.GothamBold,
+        BackgroundTransparency = 1,
+        ZIndex                 = 12,
+    }, display)
+
+    local dropH    = #items * 34
+    local dropdown = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, dropH),
+        Position         = UDim2.new(0, 0, 0, yOff + 38),
+        BackgroundColor3 = Theme.Panel3,
+        Visible          = false,
+        BorderSizePixel  = 0,
+        ZIndex           = 40,
+    }, wrapper)
+    corner(dropdown, 8)
+    new("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.25 }, dropdown)
+
+    -- Track each row for color refresh
+    local rowMap = {}  -- [optionText] = TextButton
+
+    local function refreshRows()
+        for opt, btn in pairs(rowMap) do
+            local active = opt == selected
+            btn.TextColor3       = active and Theme.Accent or Theme.TxPrimary
+            btn.BackgroundColor3 = active and Theme.Panel2  or Theme.Panel3
+            btn.Text             = (active and "[v] " or "     ") .. opt
+        end
+    end
+
+    local function closeDD()
+        isOpen           = false
+        dropdown.Visible = false
+        tween(dStroke, { Color = Theme.Border }, 0.15)
+        tween(arrow,   { Rotation = 0 },         0.20)
+    end
+
+    local function openDD()
+        isOpen           = true
+        dropdown.Visible = true
+        tween(dStroke, { Color = Theme.Accent }, 0.15)
+        tween(arrow,   { Rotation = 180 },        0.20)
+    end
+
+    for i, opt in ipairs(items) do
+        local isActive = opt == selected
+        local row = new("TextButton", {
+            Size             = UDim2.new(1, 0, 0, 34),
+            Position         = UDim2.new(0, 0, 0, (i - 1) * 34),
+            BackgroundColor3 = isActive and Theme.Panel2 or Theme.Panel3,
+            Text             = (isActive and "[v] " or "     ") .. opt,
+            TextColor3       = isActive and Theme.Accent or Theme.TxPrimary,
+            TextSize         = 13,
+            Font             = Enum.Font.Gotham,
+            TextXAlignment   = Enum.TextXAlignment.Left,
+            AutoButtonColor  = false,
+            BorderSizePixel  = 0,
+            ZIndex           = 41,
+        }, dropdown)
+
+        rowMap[opt] = row
+
+        row.MouseEnter:Connect(function()
+            if opt ~= selected then
+                tween(row, { BackgroundColor3 = Theme.Panel2 }, 0.10)
+            end
+        end)
+        row.MouseLeave:Connect(function()
+            if opt ~= selected then
+                tween(row, { BackgroundColor3 = Theme.Panel3 }, 0.12)
+            end
+        end)
+        row.MouseButton1Click:Connect(function()
+            selected        = opt
+            valueLabel.Text = opt
+            closeDD()
+            refreshRows()
+            signal:Fire(selected)
+        end)
+    end
+
+    display.MouseButton1Click:Connect(function()
+        if isOpen then closeDD() else openDD() end
+    end)
+
+    local comp = {}
+    comp.OnChanged = signal
+    comp.GetValue  = function() return selected end
+    comp.SetValue  = function(_, v)
+        selected        = v
+        valueLabel.Text = v
+        refreshRows()
+    end
+    comp.Destroy   = function() wrapper:Destroy() end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: CodeBlock
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Code      string   source code content
+        Language  string   language tag label     ["lua"]
+        Height    number   body height in pixels  [120]
+
+    Returns:
+        :SetCode(string)
+        :Destroy()
+--]]
+function StellarUI:CodeBlock(opts)
+    opts = opts or {}
+    local code  = opts.Code     or "-- your code here"
+    local lang  = opts.Language or "lua"
+    local bodyH = opts.Height   or 120
+
+    local wrapper = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, bodyH + 34),
+        BackgroundColor3 = Theme.Panel1,
+        BorderSizePixel  = 0,
+    }, self._inner)
+    corner(wrapper, 8)
+    new("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.25 }, wrapper)
+
+    -- Header bar
+    local header = new("Frame", {
+        Size             = UDim2.new(1, 0, 0, 33),
+        BackgroundColor3 = Theme.Panel2,
+        BorderSizePixel  = 0,
+        ZIndex           = 2,
+    }, wrapper)
+    corner(header, 8)
+
+    -- Traffic-light dots
+    local dotColors = {
+        Color3.fromRGB(255, 95, 87),
+        Color3.fromRGB(255, 189, 46),
+        Color3.fromRGB( 40, 200, 64),
+    }
+    for i, c in ipairs(dotColors) do
+        local dot = new("Frame", {
+            Size             = UDim2.new(0, 9, 0, 9),
+            Position         = UDim2.new(0, 8 + (i - 1) * 14, 0.5, -4),
+            BackgroundColor3 = c,
+            BorderSizePixel  = 0,
+            ZIndex           = 3,
+        }, header)
+        corner(dot, 5)
+    end
+
+    new("TextLabel", {
+        Size                   = UDim2.new(0, 60, 1, 0),
+        Position               = UDim2.new(0, 52, 0, 0),
+        Text                   = lang,
+        TextColor3             = Theme.TxSecond,
+        TextSize               = 11,
+        Font                   = Enum.Font.Code,
+        BackgroundTransparency = 1,
+        ZIndex                 = 3,
+    }, header)
+
+    local copyBtn = new("TextButton", {
+        Size             = UDim2.new(0, 58, 0, 22),
+        Position         = UDim2.new(1, -64, 0.5, -11),
+        Text             = "Copy",
+        TextColor3       = Theme.TxSecond,
+        TextSize         = 11,
+        Font             = Enum.Font.GothamMedium,
+        BackgroundColor3 = Theme.Panel1,
+        AutoButtonColor  = false,
+        BorderSizePixel  = 0,
+        ZIndex           = 3,
+    }, header)
+    corner(copyBtn, 5)
+    new("UIStroke", { Color = Theme.Border, Thickness = 1, Transparency = 0.30 }, copyBtn)
+
+    copyBtn.MouseButton1Click:Connect(function()
+        copyToClipboard(code)
+        copyBtn.Text       = "Copied!"
+        copyBtn.TextColor3 = Theme.Teal
+        task.delay(2, function()
+            if copyBtn.Parent then
+                copyBtn.Text       = "Copy"
+                copyBtn.TextColor3 = Theme.TxSecond
+            end
+        end)
+    end)
+
+    local codeLabel = new("TextLabel", {
+        Size                   = UDim2.new(1, -28, 1, -42),
+        Position               = UDim2.new(0, 14, 0, 42),
+        Text                   = code,
+        TextColor3             = Theme.TxPrimary,
+        TextSize               = 12,
+        Font                   = Enum.Font.Code,
+        TextXAlignment         = Enum.TextXAlignment.Left,
+        TextYAlignment         = Enum.TextYAlignment.Top,
+        BackgroundTransparency = 1,
+        TextWrapped            = true,
+        RichText               = false,
+        ZIndex                 = 2,
+    }, wrapper)
+
+    local comp = {}
+    comp.SetCode = function(_, c)
+        code           = c
+        codeLabel.Text = c
+    end
+    comp.Destroy = function() wrapper:Destroy() end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: Badge
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Text     string
+        Variant  string   default|accent|success|danger|warning ["default"]
+
+    Returns:
+        :SetText(string)
+        :Destroy()
+--]]
+function StellarUI:Badge(opts)
+    opts = opts or {}
+    local style = BADGE_STYLES[opts.Variant or "default"] or BADGE_STYLES.default
+    local text  = opts.Text or "Badge"
+    local w     = math.max(#text * 7 + 18, 40)
+
+    local frame = new("Frame", {
+        Size             = UDim2.new(0, w, 0, 20),
+        BackgroundColor3 = style.BG,
+        BorderSizePixel  = 0,
+    }, self._inner)
+    corner(frame, 5)
+
+    local lbl = new("TextLabel", {
+        Size                   = UDim2.new(1, 0, 1, 0),
+        Text                   = text,
+        TextColor3             = style.Tx,
+        TextSize               = 11,
+        Font                   = Enum.Font.GothamMedium,
+        BackgroundTransparency = 1,
+    }, frame)
+
+    local comp = {}
+    comp.SetText = function(_, t)
+        lbl.Text   = t
+        frame.Size = UDim2.new(0, math.max(#t * 7 + 18, 40), 0, 20)
+    end
+    comp.Destroy = function() frame:Destroy() end
+    return comp
+end
+
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: ProgressBar
+-- ──────────────────────────────────────────────────────────────
+--[[
+    Options (table):
+        Label    string
+        Value    number   initial value 0–Max      [0]
+        Max      number                            [100]
+        Variant  string   accent|success|danger|warning ["accent"]
+
+    Returns:
+        :GetValue() -> number
+        :SetValue(number)
+        :Destroy()
+--]]
+function StellarUI:ProgressBar(opts)
+    opts = opts or {}
+    local max    = opts.Max or 100
+    local color  = PROGRESS_COLORS[opts.Variant or "accent"] or Theme.Accent
+    local v      = clamp(opts.Value or 0, 0, max)
+    local hasLbl = opts.Label ~= nil
+
+    local wrapper = new("Frame", {
+        Size                   = UDim2.new(1, 0, 0, hasLbl and 36 or 14),
+        BackgroundTransparency = 1,
+        BorderSizePixel        = 0,
+    }, self._inner)
+
+    local pctLbl
+    if hasLbl then
+        new("TextLabel", {
+            Size                   = UDim2.new(1, -52, 0, 16),
+            Text                   = opts.Label,
+            TextColor3             = Theme.TxPrimary,
+            TextSize               = 13,
+            Font                   = Enum.Font.Gotham,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            BackgroundTransparency = 1,
+        }, wrapper)
+        pctLbl = new("TextLabel", {
+            Size                   = UDim2.new(0, 50, 0, 16),
+            Position               = UDim2.new(1, -50, 0, 0),
+            Text                   = math.round(v / max * 100) .. "%",
+            TextColor3             = Theme.TxSecond,
+            TextSize               = 11,
+            Font                   = Enum.Font.GothamMedium,
+            TextXAlignment         = Enum.TextXAlignment.Right,
+            BackgroundTransparency = 1,
+        }, wrapper)
+    end
+
+    local trackY = hasLbl and 22 or 4
+    local track  = new("Frame", {
         Size             = UDim2.new(1, 0, 0, 5),
         Position         = UDim2.new(0, 0, 0, trackY),
         BackgroundColor3 = Theme.Panel3,
         BorderSizePixel  = 0,
     }, wrapper)
-    applyCorner(track, 3)
+    corner(track, 3)
 
-    local fill = create("Frame", {
-        Size             = UDim2.new(value / max, 0, 1, 0),
+    local fill = new("Frame", {
+        Size             = UDim2.new(v / max, 0, 1, 0),
         BackgroundColor3 = color,
         BorderSizePixel  = 0,
     }, track)
-    applyCorner(fill, 3)
+    corner(fill, 3)
 
-    local comp = {
-        Instance = wrapper,
-        GetValue = function() return value end,
-        SetValue = function(_, v)
-            value = math.clamp(v, 0, max)
-            local pct = value / max
-            tween(fill, { Size = UDim2.new(pct, 0, 1, 0) }, 0.3)
-            if pctLabel then
-                pctLabel.Text = math.round(pct * 100) .. "%"
-            end
-        end,
-        Destroy = function() wrapper:Destroy() end,
-    }
+    local comp = {}
+    comp.GetValue = function() return v end
+    comp.SetValue = function(_, val)
+        v = clamp(val, 0, max)
+        local pct = v / max
+        tween(fill, { Size = UDim2.new(pct, 0, 1, 0) }, 0.30)
+        if pctLbl then pctLbl.Text = math.round(pct * 100) .. "%" end
+    end
+    comp.Destroy  = function() wrapper:Destroy() end
     return comp
 end
 
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
 --  COMPONENT: Avatar
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
 --[[
-    Options:
-        Name   : string   -- used to generate initials (e.g. "Alex Ray" -> "AR")
-        Size   : number   -- pixel size (default 36)
-        Status : string   -- "online"|"away"|"busy"|"offline"
-    Methods:
+    Options (table):
+        Name    string   generates initials (e.g. "Alex Ray" → "AR")  ["U"]
+        Size    number   pixel size                                    [36]
+        Status  string   online|away|busy|offline
+
+    Returns:
         :SetStatus(string)
         :Destroy()
 --]]
-
-local STATUS_COLORS = {
-    online  = Color3.fromRGB( 34, 197,  94),
-    away    = Theme.Warning,
-    busy    = Theme.Danger,
-    offline = Theme.TextSecond,
-}
-
 function StellarUI:Avatar(opts)
     opts = opts or {}
-    local name   = opts.Name or "User"
-    local sz     = opts.Size or 36
+    local sz   = opts.Size or 36
+    local name = opts.Name or "User"
 
-    local parts    = name:split(" ")
+    -- FIX: use safe splitStr instead of non-standard :split()
+    local parts    = splitStr(name, " ")
     local initials = ""
     for i = 1, math.min(2, #parts) do
-        initials = initials .. parts[i]:sub(1, 1):upper()
+        initials = initials .. string.upper(string.sub(parts[i], 1, 1))
     end
+    if initials == "" then initials = "U" end
 
-    local frame = create("Frame", {
+    local frame = new("Frame", {
         Size             = UDim2.new(0, sz, 0, sz),
         BackgroundColor3 = Theme.Accent,
         BorderSizePixel  = 0,
-    }, self.Container)
-    applyCorner(frame, sz / 2)
+    }, self._inner)
+    corner(frame, sz / 2)
 
-    -- Gradient background
-    create("UIGradient", {
-        Color   = ColorSequence.new(Theme.Accent, Theme.Teal),
+    -- Accent → Teal gradient
+    new("UIGradient", {
+        Color    = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Theme.Accent),
+            ColorSequenceKeypoint.new(1, Theme.Teal),
+        }),
         Rotation = 135,
     }, frame)
 
-    create("TextLabel", {
-        Size           = UDim2.new(1, 0, 1, 0),
-        Text           = initials,
-        TextColor3     = Color3.fromRGB(255,255,255),
-        TextSize       = math.floor(sz * 0.34),
-        Font           = Enum.Font.GothamBold,
+    new("TextLabel", {
+        Size                   = UDim2.new(1, 0, 1, 0),
+        Text                   = initials,
+        TextColor3             = Theme.White,
+        TextSize               = math.floor(sz * 0.35),
+        Font                   = Enum.Font.GothamBold,
         BackgroundTransparency = 1,
-        ZIndex         = 2,
+        ZIndex                 = 2,
     }, frame)
 
-    -- Status dot
-    local dotSz   = math.floor(sz * 0.27)
-    local statusDot
+    local dotSz = math.floor(sz * 0.28)
+    local dotFrame
     if opts.Status then
-        statusDot = create("Frame", {
+        dotFrame = new("Frame", {
             Size             = UDim2.new(0, dotSz, 0, dotSz),
             Position         = UDim2.new(1, -dotSz + 1, 1, -dotSz + 1),
-            BackgroundColor3 = STATUS_COLORS[opts.Status] or Theme.TextSecond,
-            BorderSizePixel  = 2,
+            BackgroundColor3 = STATUS_COLORS[opts.Status] or Theme.TxSecond,
+            BorderSizePixel  = 0,
             ZIndex           = 3,
         }, frame)
-        applyCorner(statusDot, dotSz / 2)
+        corner(dotFrame, dotSz / 2)
+        new("UIStroke", { Color = Theme.BG, Thickness = 2, Transparency = 0 }, dotFrame)
     end
 
-    local comp = {
-        Instance  = frame,
-        SetStatus = function(_, s)
-            if statusDot then
-                statusDot.BackgroundColor3 = STATUS_COLORS[s] or Theme.TextSecond
-            end
-        end,
-        Destroy   = function() frame:Destroy() end,
-    }
+    local comp = {}
+    comp.SetStatus = function(_, s)
+        if dotFrame then
+            dotFrame.BackgroundColor3 = STATUS_COLORS[s] or Theme.TxSecond
+        end
+    end
+    comp.Destroy   = function() frame:Destroy() end
     return comp
 end
 
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
 --  COMPONENT: SectionHeader
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
 --[[
-    Options:
-        Title : string
-        Badge : string   (optional badge text)
---]]
+    Options (table):
+        Title  string
+        Badge  string   optional badge text
 
+    Returns:
+        :Destroy()
+--]]
 function StellarUI:SectionHeader(opts)
     opts = opts or {}
 
-    local wrapper = create("Frame", {
-        Size             = UDim2.new(1, 0, 0, 36),
+    local wrapper = new("Frame", {
+        Size                   = UDim2.new(1, 0, 0, 38),
         BackgroundTransparency = 1,
-        BorderSizePixel  = 0,
-    }, self.Container)
+        BorderSizePixel        = 0,
+    }, self._inner)
 
-    create("TextLabel", {
-        Size           = UDim2.new(1, 0, 0, 14),
-        Position       = UDim2.new(0, 0, 0, 16),
-        Text           = (opts.Title or "SECTION"):upper(),
-        TextColor3     = Theme.TextSecond,
-        TextSize       = 10,
-        Font           = Enum.Font.GothamMedium,
-        TextXAlignment = Enum.TextXAlignment.Left,
+    new("TextLabel", {
+        Size                   = UDim2.new(1, 0, 0, 14),
+        Position               = UDim2.new(0, 0, 0, 18),
+        Text                   = string.upper(opts.Title or "SECTION"),
+        TextColor3             = Theme.TxSecond,
+        TextSize               = 10,
+        Font                   = Enum.Font.GothamMedium,
+        TextXAlignment         = Enum.TextXAlignment.Left,
         BackgroundTransparency = 1,
-        LetterSpacing  = 2,  -- note: Roblox doesn't support this; it's for reference
     }, wrapper)
 
-    -- Bottom divider
-    create("Frame", {
+    new("Frame", {
         Size             = UDim2.new(1, 0, 0, 1),
         Position         = UDim2.new(0, 0, 1, -1),
         BackgroundColor3 = Theme.Border,
-        BackgroundTransparency = 0.6,
+        BackgroundTransparency = 0.55,
         BorderSizePixel  = 0,
     }, wrapper)
 
-    local comp = {
-        Instance = wrapper,
-        Destroy  = function() wrapper:Destroy() end,
-    }
+    if opts.Badge then
+        local bw   = math.max(#opts.Badge * 7 + 14, 28)
+        local bfrm = new("Frame", {
+            Size             = UDim2.new(0, bw, 0, 16),
+            Position         = UDim2.new(0, #(opts.Title or "") * 7 + 10, 0, 18),
+            BackgroundColor3 = Theme.AccentDim,
+            BorderSizePixel  = 0,
+        }, wrapper)
+        corner(bfrm, 4)
+        new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 1, 0),
+            Text                   = opts.Badge,
+            TextColor3             = Theme.Accent,
+            TextSize               = 9,
+            Font                   = Enum.Font.GothamMedium,
+            BackgroundTransparency = 1,
+        }, bfrm)
+    end
+
+    local comp = {}
+    comp.Destroy = function() wrapper:Destroy() end
     return comp
 end
 
--- ============================================================
---  COMPONENT: Notification / Toast
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: Notification (Toast)
+-- ──────────────────────────────────────────────────────────────
 --[[
-    Options:
-        Title   : string
-        Message : string
-        Variant : "info"|"success"|"danger"|"warning"
-        Duration: number   -- seconds before auto-dismiss (default 3)
-    Methods:
+    Options (table):
+        Title    string
+        Message  string
+        Variant  string   info|success|danger|warning  ["info"]
+        Duration number   seconds, 0 = no auto-dismiss  [3]
+
+    Returns:
         :Dismiss()
 --]]
-
-local NOTIF_STYLES = {
-    info    = { Icon = "ℹ", Color = Theme.Accent  },
-    success = { Icon = "✓", Color = Theme.Teal    },
-    danger  = { Icon = "✕", Color = Theme.Danger  },
-    warning = { Icon = "⚠", Color = Theme.Warning },
-}
-
 function StellarUI:Notification(opts)
     opts = opts or {}
-    local style    = NOTIF_STYLES[opts.Variant or "info"] or NOTIF_STYLES.info
-    local duration = opts.Duration or 3
+    local style  = NOTIF_STYLES[opts.Variant or "info"] or NOTIF_STYLES.info
+    local dur    = opts.Duration ~= nil and opts.Duration or 3
 
-    local notif = create("Frame", {
+    local notif = new("Frame", {
         Size             = UDim2.new(1, 0, 0, 60),
-        Position         = UDim2.new(0, 0, 0, -64),
+        Position         = UDim2.new(0, 0, 0, -66),
         BackgroundColor3 = Theme.Panel2,
         BorderSizePixel  = 0,
-        ClipsDescendants = false,
-        ZIndex           = 100,
-    }, self.Container)
-    applyCorner(notif, 10)
-    create("UIStroke", { Color = style.Color, Thickness = 1, Transparency = 0.4 }, notif)
+        ZIndex           = 90,
+    }, self._inner)
+    corner(notif, 10)
+    new("UIStroke", { Color = style.Color, Thickness = 1, Transparency = 0.35 }, notif)
 
-    -- Accent bar on left
-    create("Frame", {
-        Size             = UDim2.new(0, 3, 1, 0),
+    local bar = new("Frame", {
+        Size             = UDim2.new(0, 3, 1, -16),
+        Position         = UDim2.new(0, 0, 0, 8),
         BackgroundColor3 = style.Color,
         BorderSizePixel  = 0,
-        ZIndex           = 101,
+        ZIndex           = 91,
     }, notif)
-    local leftBar = notif:GetChildren()[#notif:GetChildren()]
-    applyCorner(leftBar, 2)
+    corner(bar, 2)
 
-    -- Icon
-    create("TextLabel", {
-        Size           = UDim2.new(0, 24, 1, 0),
-        Position       = UDim2.new(0, 14, 0, 0),
-        Text           = style.Icon,
-        TextColor3     = style.Color,
-        TextSize       = 18,
-        Font           = Enum.Font.GothamBold,
+    new("TextLabel", {
+        Size                   = UDim2.new(0, 24, 1, 0),
+        Position               = UDim2.new(0, 14, 0, 0),
+        Text                   = style.Icon,
+        TextColor3             = style.Color,
+        TextSize               = 16,
+        Font                   = Enum.Font.GothamBold,
         BackgroundTransparency = 1,
-        ZIndex         = 101,
+        ZIndex                 = 91,
     }, notif)
 
-    -- Title
-    create("TextLabel", {
-        Size           = UDim2.new(1, -52, 0, 20),
-        Position       = UDim2.new(0, 44, 0, 10),
-        Text           = opts.Title or "Notification",
-        TextColor3     = Theme.TextPrimary,
-        TextSize       = 13,
-        Font           = Enum.Font.GothamMedium,
-        TextXAlignment = Enum.TextXAlignment.Left,
+    new("TextLabel", {
+        Size                   = UDim2.new(1, -58, 0, 20),
+        Position               = UDim2.new(0, 44, 0, 10),
+        Text                   = opts.Title or "Notification",
+        TextColor3             = Theme.TxPrimary,
+        TextSize               = 13,
+        Font                   = Enum.Font.GothamMedium,
+        TextXAlignment         = Enum.TextXAlignment.Left,
         BackgroundTransparency = 1,
-        ZIndex         = 101,
+        ZIndex                 = 91,
     }, notif)
 
-    -- Message
     if opts.Message then
-        create("TextLabel", {
-            Size           = UDim2.new(1, -52, 0, 18),
-            Position       = UDim2.new(0, 44, 0, 30),
-            Text           = opts.Message,
-            TextColor3     = Theme.TextSecond,
-            TextSize       = 11,
-            Font           = Enum.Font.Gotham,
-            TextXAlignment = Enum.TextXAlignment.Left,
+        new("TextLabel", {
+            Size                   = UDim2.new(1, -58, 0, 16),
+            Position               = UDim2.new(0, 44, 0, 30),
+            Text                   = opts.Message,
+            TextColor3             = Theme.TxSecond,
+            TextSize               = 11,
+            Font                   = Enum.Font.Gotham,
+            TextXAlignment         = Enum.TextXAlignment.Left,
             BackgroundTransparency = 1,
-            ZIndex         = 101,
+            ZIndex                 = 91,
         }, notif)
     end
 
-    -- Slide in
-    tween(notif, { Position = UDim2.new(0, 0, 0, 0) }, 0.3, Enum.EasingStyle.Back)
+    tween(notif, { Position = UDim2.new(0, 0, 0, 0) }, 0.30, Enum.EasingStyle.Back)
 
+    local dismissed = false
     local function dismiss()
-        tween(notif, { Position = UDim2.new(0, 0, 0, -64) }, 0.25)
-        task.delay(0.3, function() notif:Destroy() end)
+        if dismissed then return end
+        dismissed = true
+        tween(notif, { Position = UDim2.new(0, 0, 0, -66) }, 0.22)
+        task.delay(0.26, function()
+            if notif.Parent then notif:Destroy() end
+        end)
     end
 
-    -- Close button
-    local closeBtn = create("TextButton", {
-        Size             = UDim2.new(0, 20, 0, 20),
-        Position         = UDim2.new(1, -24, 0, 6),
-        Text             = "✕",
-        TextColor3       = Theme.TextSecond,
-        TextSize         = 12,
-        Font             = Enum.Font.GothamBold,
+    local closeBtn = new("TextButton", {
+        Size                   = UDim2.new(0, 20, 0, 20),
+        Position               = UDim2.new(1, -26, 0, 6),
+        Text                   = "x",
+        TextColor3             = Theme.TxMuted,
+        TextSize               = 12,
+        Font                   = Enum.Font.GothamBold,
         BackgroundTransparency = 1,
-        ZIndex           = 102,
+        ZIndex                 = 92,
     }, notif)
     closeBtn.MouseButton1Click:Connect(dismiss)
 
-    if duration > 0 then
-        task.delay(duration, dismiss)
+    if dur > 0 then
+        task.delay(dur, dismiss)
     end
 
-    local comp = {
-        Instance = notif,
-        Dismiss  = dismiss,
-    }
+    local comp = {}
+    comp.Dismiss = dismiss
     return comp
 end
 
--- ============================================================
---  NAVBAR (Side or Bottom)
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
+--  COMPONENT: NavBar
+-- ──────────────────────────────────────────────────────────────
 --[[
-    Options:
-        Items  : table   -- { { Id="main", Icon="⊞", Label="Main" }, ... }
-        Mode   : string  -- "side" | "bottom"
-        Default: string  -- initial active item Id
-    Events:
-        .OnChanged:Connect(function(id: string) end)
-    Methods:
+    Options (table):
+        Items    table    { { Id="x", Icon="◇", Label="Name" }, … }
+        Mode     string   "side" | "bottom"  ["side"]
+        Default  string   initial active item Id
+
+    Returns:
+        .OnChanged : Signal<string>
         :SetActive(id: string)
         :Destroy()
 --]]
-
 function StellarUI:NavBar(opts)
-    opts  = opts or {}
-    local items   = opts.Items   or {}
-    local mode    = opts.Mode    or "side"
-    local active  = opts.Default or (items[1] and items[1].Id or "")
-    local signal  = makeSignal()
-    local buttons = {}
+    opts = opts or {}
+    local items  = opts.Items   or {}
+    local mode   = opts.Mode    or "side"
+    local active = opts.Default or (items[1] and items[1].Id or "")
+    local signal = makeSignal()
+    local isSide = mode == "side"
 
-    local isVertical = mode == "side"
-    local navW = isVertical and 68 or 0
-    local navH = isVertical and 0  or 58
-
-    local nav = create("Frame", {
-        Size             = isVertical
-            and UDim2.new(0, navW, 1, 0)
-            or  UDim2.new(1, 0, 0, navH),
-        Position         = isVertical
-            and UDim2.new(0, 0, 0, 0)
-            or  UDim2.new(0, 0, 1, -navH),
+    local nav = new("Frame", {
+        Size             = isSide and UDim2.new(0, 64, 1, 0)
+                                   or UDim2.new(1, 0, 0, 58),
+        Position         = isSide and UDim2.new(0, 0, 0, 0)
+                                   or UDim2.new(0, 0, 1, -58),
         BackgroundColor3 = Theme.Panel1,
         BorderSizePixel  = 0,
-    }, self.Container)
+    }, self.Root)
 
-    -- Separator line
-    create("Frame", {
-        Size             = isVertical
-            and UDim2.new(0, 1, 1, 0)
-            or  UDim2.new(1, 0, 0, 1),
-        Position         = isVertical
-            and UDim2.new(1, -1, 0, 0)
-            or  UDim2.new(0, 0, 0, 0),
+    -- Separator border
+    new("Frame", {
+        Size             = isSide and UDim2.new(0, 1, 1, 0)
+                                   or UDim2.new(1, 0, 0, 1),
+        Position         = isSide and UDim2.new(1, -1, 0, 0)
+                                   or UDim2.new(0, 0, 0, 0),
         BackgroundColor3 = Theme.Border,
-        BackgroundTransparency = 0.5,
+        BackgroundTransparency = 0.45,
         BorderSizePixel  = 0,
     }, nav)
 
-    applyListLayout(nav,
-        isVertical and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal,
-        isVertical and 4 or 0,
+    -- FIX: use a child inner frame so UIListLayout and UIPadding
+    --      do not conflict on the same Frame.
+    local inner = new("Frame", {
+        Size                   = UDim2.new(1, 0, 1, -20),
+        Position               = UDim2.new(0, 0, 0, 10),
+        BackgroundTransparency = 1,
+        BorderSizePixel        = 0,
+    }, nav)
+
+    listLayout(inner,
+        isSide and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal,
+        4,
         Enum.HorizontalAlignment.Center
     )
-    applyPadding(nav, 10, 0, 10, 0)
 
-    local function refresh()
-        for id, btn in pairs(buttons) do
-            local isActive = id == active
-            tween(btn.frame, {
-                BackgroundColor3 = isActive and Theme.AccentDim or Theme.Panel1,
-                BackgroundTransparency = isActive and 0 or 1,
+    local btnMap = {}  -- [Id] = { frame, icon, label }
+
+    local function refreshNav()
+        for id, data in pairs(btnMap) do
+            local on = id == active
+            tween(data.frame, {
+                BackgroundColor3       = on and Theme.AccentDim or Theme.Panel1,
+                BackgroundTransparency = on and 0 or 1,
             }, 0.15)
-            btn.label.TextColor3 = isActive and Theme.Accent or Theme.TextSecond
+            data.icon.TextColor3  = on and Theme.Accent or Theme.TxSecond
+            data.label.TextColor3 = on and Theme.Accent or Theme.TxSecond
         end
     end
 
     for _, item in ipairs(items) do
-        local itemFrame = create("Frame", {
-            Size             = isVertical
-                and UDim2.new(0, 52, 0, 52)
-                or  UDim2.new(1/#items, 0, 1, 0),
-            BackgroundColor3 = item.Id == active and Theme.AccentDim or Theme.Panel1,
-            BackgroundTransparency = item.Id == active and 0 or 1,
+        local isOn = item.Id == active
+
+        local itemFrame = new("Frame", {
+            Size             = isSide and UDim2.new(0, 50, 0, 50)
+                                       or UDim2.new(1 / #items, 0, 1, 0),
+            BackgroundColor3 = isOn and Theme.AccentDim or Theme.Panel1,
+            BackgroundTransparency = isOn and 0 or 1,
             BorderSizePixel  = 0,
-        }, nav)
-        applyCorner(itemFrame, 9)
+        }, inner)
+        corner(itemFrame, 9)
 
-        local iconLbl = create("TextLabel", {
-            Size           = UDim2.new(1, 0, 0, 22),
-            Position       = UDim2.new(0, 0, 0, 8),
-            Text           = item.Icon or "◇",
-            TextColor3     = item.Id == active and Theme.Accent or Theme.TextSecond,
-            TextSize       = 16,
-            Font           = Enum.Font.Gotham,
+        local iconLbl = new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 0, 22),
+            Position               = UDim2.new(0, 0, 0, 7),
+            Text                   = item.Icon or "o",
+            TextColor3             = isOn and Theme.Accent or Theme.TxSecond,
+            TextSize               = 16,
+            Font                   = Enum.Font.Gotham,
             BackgroundTransparency = 1,
         }, itemFrame)
 
-        local textLbl = create("TextLabel", {
-            Name           = "Label",
-            Size           = UDim2.new(1, 0, 0, 12),
-            Position       = UDim2.new(0, 0, 0, 32),
-            Text           = item.Label or item.Id,
-            TextColor3     = item.Id == active and Theme.Accent or Theme.TextSecond,
-            TextSize       = 9,
-            Font           = Enum.Font.Gotham,
+        local textLbl = new("TextLabel", {
+            Size                   = UDim2.new(1, 0, 0, 12),
+            Position               = UDim2.new(0, 0, 0, 31),
+            Text                   = item.Label or item.Id,
+            TextColor3             = isOn and Theme.Accent or Theme.TxSecond,
+            TextSize               = 9,
+            Font                   = Enum.Font.Gotham,
             BackgroundTransparency = 1,
         }, itemFrame)
 
-        local hitbox = create("TextButton", {
-            Size               = UDim2.new(1, 0, 1, 0),
+        local hit = new("TextButton", {
+            Size                   = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
-            Text               = "",
-            ZIndex             = 5,
+            Text                   = "",
+            ZIndex                 = 5,
         }, itemFrame)
 
-        buttons[item.Id] = { frame = itemFrame, label = textLbl, icon = iconLbl }
+        btnMap[item.Id] = { frame = itemFrame, icon = iconLbl, label = textLbl }
 
-        hitbox.MouseButton1Click:Connect(function()
+        hit.MouseButton1Click:Connect(function()
             active = item.Id
-            refresh()
+            refreshNav()
             signal:Fire(active)
         end)
     end
 
-    local comp = {
-        Instance  = nav,
-        OnChanged = signal,
-        SetActive = function(_, id)
-            active = id
-            refresh()
-        end,
-        Destroy   = function() nav:Destroy() end,
-    }
+    local comp = {}
+    comp.OnChanged = signal
+    comp.SetActive = function(_, id)
+        active = id
+        refreshNav()
+    end
+    comp.Destroy   = function() nav:Destroy() end
     return comp
 end
 
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
 --  CONSTRUCTOR
--- ============================================================
+-- ──────────────────────────────────────────────────────────────
+--[[
+    StellarUI.new(parent: Instance) -> StellarUIInstance
 
+    `parent` should be a ScreenGui or a Frame.
+    All components mount onto an internal scrollable container.
+
+    Properties:
+        .Root     Frame    outermost frame
+        .Theme    table    design tokens (read/write to retheme)
+        .Version  string
+
+    Methods:
+        :Toggle(opts)      :Button(opts)       :TextInput(opts)
+        :Slider(opts)      :Select(opts)       :CodeBlock(opts)
+        :Badge(opts)       :ProgressBar(opts)  :Avatar(opts)
+        :Notification(opts):NavBar(opts)       :SectionHeader(opts)
+        :Destroy()
+--]]
 function StellarUI.new(parent)
+    assert(
+        parent and typeof(parent) == "Instance",
+        "[StellarUI] StellarUI.new() requires a valid Instance as parent."
+    )
+
     local self = setmetatable({}, StellarUI)
 
-    self.Container = create("Frame", {
+    -- Root frame
+    self.Root = new("Frame", {
         Size             = UDim2.new(1, 0, 1, 0),
         BackgroundColor3 = Theme.BG,
-        BackgroundTransparency = 0,
         BorderSizePixel  = 0,
     }, parent)
 
-    applyListLayout(self.Container, Enum.FillDirection.Vertical, 0)
-    applyPadding(self.Container, 0, 16, 16, 16)
+    -- Scrollable viewport
+    local scroll = new("ScrollingFrame", {
+        Size                       = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency     = 1,
+        BorderSizePixel            = 0,
+        ScrollBarThickness         = 2,
+        ScrollBarImageColor3       = Theme.Accent,
+        ScrollBarImageTransparency = 0.5,
+        CanvasSize                 = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize        = Enum.AutomaticSize.Y,
+        ElasticBehavior            = Enum.ElasticBehavior.WhenScrollable,
+    }, self.Root)
 
-    self.Theme = Theme
+    -- FIX: components parent to this inner frame, NOT directly to the
+    --      ScrollingFrame, so UIListLayout and UIPadding stay separate.
+    local inner = new("Frame", {
+        Size                   = UDim2.new(1, -32, 1, 0),
+        Position               = UDim2.new(0, 16, 0, 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel        = 0,
+        AutomaticSize          = Enum.AutomaticSize.Y,
+    }, scroll)
+
+    listLayout(inner, Enum.FillDirection.Vertical, 6)
+
+    self._inner  = inner
+    self.Theme   = Theme
+    self.Version = StellarUI.Version
 
     return self
 end
-    return StellarUI
+
+--- Destroy the entire UI hierarchy.
+function StellarUI:Destroy()
+    if self.Root and self.Root.Parent then
+        self.Root:Destroy()
+    end
+end
+
+return StellarUI
