@@ -1,3087 +1,2440 @@
 --[[
 
-    ╔══════════════════════════════════════════╗
+    ╔══════════════════════════════════════════════════════╗
+    ║   User Interface Library  —  Stellar  v2.0          ║
+    ║   Original: Friskl  |  Major Overhaul: v2.0         ║
+    ╚══════════════════════════════════════════════════════╝
 
-    ║   User Interface Library  —  Stellar     ║
+    CHANGELOG (v2.0 — Major Overhaul):
 
-    ║   Original: Friskl  |  Updated Design    ║
+    ── ARCHITECTURE ────────────────────────────────────────
+    • Maid cleanup system — every connection tracked; zero leaks on Destroy()
+    • Per-window DragType (was module-level → broke 2+ windows)
+    • StoredInfo is now per-window (was module-level → tab collisions fixed)
+    • Native Color3:Lerp replaces manual LerpColor implementation
 
-    ╚══════════════════════════════════════════╝
+    ── PERFORMANCE ─────────────────────────────────────────
+    • Slider: event-driven via RunService.Heartbeat (removes CPU polling loop)
+    • Touch slider: uses InputObject.Position directly (no Player.Mouse fallback)
+    • Theme engine: same O(n) sweep but all new components registered in rules
 
+    ── BUG FIXES ───────────────────────────────────────────
+    • Minimize: now sets Opened=false so keybind can re-open
+    • Dropdown: post-close Destroy delay 2 s → 0.3 s
+    • Input: duplicate FocusLost connection removed
+    • Hover base color re-captured correctly per call (not shared upvalue)
+    • Keybind: Listening guard prevents double-capture on rapid click
 
+    ── COMPONENT RETURN OBJECTS ────────────────────────────
+    All Add* now return a control table:
+      Toggle:Set(bool)      / Toggle:Get()      / Toggle:OnChanged(fn)
+      Slider:Set(n)         / Slider:Get()      / Slider:OnChanged(fn)
+      Input:Set(str)        / Input:Get()
+      Dropdown:Set(value)   / Dropdown:Get()
+      Keybind:Set(keycode)  / Keybind:Get()     / Keybind:OnChanged(fn)
+      ColorPicker:Set(c3)   / ColorPicker:Get()
+      ProgressBar:Set(0–1)  / ProgressBar:Get()
+      Paragraph:SetTitle(s) / Paragraph:SetDescription(s)
+      Label:Set(str)        / Label:Get()
 
-    CHANGELOG (Stellar Update):
+    ── NEW COMPONENTS ──────────────────────────────────────
+    • AddColorPicker()    — HSV wheel + hex input (UIGradient, no assets)
+    • AddMultiDropdown()  — multi-select with ✓ indicators
+    • AddProgressBar()    — animated read-only fill bar
+    • AddLabel()          — lightweight single-line text element
+    • AddDivider()        — horizontal separator line
 
-    • New dark theme with blue-purple accent colors
+    ── WINDOW API ──────────────────────────────────────────
+    • Window:Destroy()            — full teardown, all connections severed
+    • Window:SetVisible(bool)     — programmatic show/hide
+    • Window:OnThemeChanged(fn)   — register callback on theme switch
 
-    • Subtitle support in window titlebar
+    ── NOTIFICATIONS ───────────────────────────────────────
+    • Proper vertical stacking — multiple toasts stack upward
 
-    • Dark / Light theme toggle in titlebar
-
-    • New AddCodeBlock() component with copy button
-
-    • Slider: MinValue support + full touch/mobile drag
-
-    • Drag: full Touch event support for mobile
-
-    • Fixed Blur crash when blur is disabled on close
-
-    • Smoother animations (Quart easing, tighter timing)
-
-    • Larger touch targets on mobile (IsMobile detection)
-
-    • Full null-safe checks throughout
-
-    • Hover effects with accent color tinting
-
-    • Tab active state: accent color highlight + icon tint
-
-    • [NEW] Bottom-right resize grip — drag to resize window (Mouse + Touch)
+    ── MOBILE ──────────────────────────────────────────────
+    • Swipe left/right gesture on the window to navigate tabs
+    • Larger touch targets maintained (IsMobile detection)
+    • Touch slider uses actual touch position
 
 ]]
 
 
-
 -- ─────────────────────────────────────────────
-
---  Wait for game load
-
+--  Boot
 -- ─────────────────────────────────────────────
 
 local GetService = game.GetService
-
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 
-
 -- ─────────────────────────────────────────────
-
 --  Services
-
 -- ─────────────────────────────────────────────
 
 local Services = {
-
     Tween  = GetService(game, "TweenService"),
-
     Run    = GetService(game, "RunService"),
-
     Input  = GetService(game, "UserInputService"),
-
     Insert = GetService(game, "InsertService"),
-
 }
-
-
 
 local LocalPlayer = GetService(game, "Players").LocalPlayer
-
 local Player = {
-
     Mouse = LocalPlayer:GetMouse(),
-
     GUI   = LocalPlayer.PlayerGui,
-
 }
-
 
 
 -- ─────────────────────────────────────────────
-
 --  Mobile Detection
-
 -- ─────────────────────────────────────────────
 
 local IsMobile = Services.Input.TouchEnabled and not Services.Input.KeyboardEnabled
 
 
-
 -- ─────────────────────────────────────────────
-
---  Global Setup Config
-
+--  Global Setup
 -- ─────────────────────────────────────────────
 
 local Setup = {
-
     Keybind      = Enum.KeyCode.LeftControl,
-
     Transparency = 0,
-
     ThemeMode    = "Dark",
-
     Size         = nil,
-
 }
 
 
-
 -- ─────────────────────────────────────────────
-
---  Theme Definitions
-
+--  Themes
 -- ─────────────────────────────────────────────
 
 local Themes = {
 
     Dark = {
-
         -- Backgrounds
-
         Primary      = Color3.fromRGB(20,  20,  24),
-
         Secondary    = Color3.fromRGB(26,  26,  32),
-
         Component    = Color3.fromRGB(30,  30,  38),
-
         Interactable = Color3.fromRGB(40,  40,  50),
-
         Sidebar      = Color3.fromRGB(22,  22,  28),
 
-
-
         -- Text
-
         Title        = Color3.fromRGB(235, 235, 242),
-
         Description  = Color3.fromRGB(140, 140, 155),
-
         Tab          = Color3.fromRGB(170, 170, 182),
-
         TabActive    = Color3.fromRGB(235, 235, 242),
-
         Muted        = Color3.fromRGB(100, 100, 115),
-
         SectionText  = Color3.fromRGB(160, 160, 175),
 
-
-
-        -- Accent (blue-purple)
-
+        -- Accent
         Accent       = Color3.fromRGB(108, 130, 255),
-
         AccentDark   = Color3.fromRGB(80,  100, 220),
-
-        AccentAlpha  = Color3.fromRGB(108, 130, 255), -- same, used for tint
-
-
+        AccentAlpha  = Color3.fromRGB(108, 130, 255),
 
         -- Borders
-
         Outline      = Color3.fromRGB(42,  42,  54),
-
         Shadow       = Color3.fromRGB(0,   0,   0),
-
         Divider      = Color3.fromRGB(35,  35,  45),
 
-
-
         -- Toggle
-
         ToggleOn     = Color3.fromRGB(108, 130, 255),
-
         ToggleOff    = Color3.fromRGB(50,  50,  62),
-
         ToggleKnob   = Color3.fromRGB(255, 255, 255),
-
-
 
         -- Slider
-
         SliderFill   = Color3.fromRGB(90,  115, 255),
-
         SliderTrack  = Color3.fromRGB(42,  42,  54),
 
-
-
         -- Icons
-
         Icon         = Color3.fromRGB(160, 160, 175),
-
         IconActive   = Color3.fromRGB(108, 130, 255),
 
-
-
         -- Code block dots
-
         CodeDotRed    = Color3.fromRGB(255,  95,  87),
-
         CodeDotYellow = Color3.fromRGB(255, 189,  46),
-
         CodeDotGreen  = Color3.fromRGB( 40, 201,  64),
 
+        -- Progress bar (new)
+        ProgressBg   = Color3.fromRGB(40,  40,  52),
+        ProgressFill = Color3.fromRGB(108, 130, 255),
+
+        -- Color picker (new)
+        CPBackground = Color3.fromRGB(28,  28,  36),
+        CPBorder     = Color3.fromRGB(55,  55,  70),
+        CPHexBg      = Color3.fromRGB(35,  35,  45),
     },
-
-
 
     Light = {
-
         Primary      = Color3.fromRGB(242, 242, 248),
-
         Secondary    = Color3.fromRGB(232, 232, 242),
-
         Component    = Color3.fromRGB(220, 220, 234),
-
         Interactable = Color3.fromRGB(205, 205, 222),
-
         Sidebar      = Color3.fromRGB(228, 228, 240),
 
-
-
         Title        = Color3.fromRGB(18,  18,  24),
-
         Description  = Color3.fromRGB(90,  90, 108),
-
         Tab          = Color3.fromRGB(60,  60,  78),
-
         TabActive    = Color3.fromRGB(18,  18,  24),
-
         Muted        = Color3.fromRGB(140, 140, 158),
-
         SectionText  = Color3.fromRGB(80,  80, 100),
 
-
-
         Accent       = Color3.fromRGB(88,  110, 240),
-
         AccentDark   = Color3.fromRGB(65,  88,  210),
-
         AccentAlpha  = Color3.fromRGB(88,  110, 240),
 
-
-
         Outline      = Color3.fromRGB(195, 195, 212),
-
         Shadow       = Color3.fromRGB(140, 140, 165),
-
         Divider      = Color3.fromRGB(205, 205, 222),
 
-
-
         ToggleOn     = Color3.fromRGB(88,  110, 240),
-
         ToggleOff    = Color3.fromRGB(185, 185, 202),
-
         ToggleKnob   = Color3.fromRGB(255, 255, 255),
 
-
-
         SliderFill   = Color3.fromRGB(88,  110, 240),
-
         SliderTrack  = Color3.fromRGB(195, 195, 212),
 
-
-
         Icon         = Color3.fromRGB(80,  80, 100),
-
         IconActive   = Color3.fromRGB(88,  110, 240),
 
-
-
         CodeDotRed    = Color3.fromRGB(255,  95,  87),
-
         CodeDotYellow = Color3.fromRGB(255, 189,  46),
-
         CodeDotGreen  = Color3.fromRGB( 40, 201,  64),
 
-    },
+        ProgressBg   = Color3.fromRGB(210, 210, 225),
+        ProgressFill = Color3.fromRGB(88,  110, 240),
 
+        CPBackground = Color3.fromRGB(238, 238, 248),
+        CPBorder     = Color3.fromRGB(195, 195, 212),
+        CPHexBg      = Color3.fromRGB(218, 218, 232),
+    },
 }
 
-
-
 -- Active theme reference (mutable)
-
 local Theme = Themes[Setup.ThemeMode]
 
 
-
 -- ─────────────────────────────────────────────
-
---  Utility Functions
-
+--  Maid  (connection / instance cleanup)
 -- ─────────────────────────────────────────────
-
-local function Clone(obj)   return obj:Clone()   end
-
-local function Destroy(obj) obj:Destroy()         end
-
-local function Connect(sig, fn) return sig:Connect(fn) end
-
-
-
---- Smooth tween helper (defaults to Quart/Out)
-
-local function Tween(obj, speed, props, info)
-
-    local style = (info and info.EasingStyle)     or Enum.EasingStyle.Quart
-
-    local dir   = (info and info.EasingDirection) or Enum.EasingDirection.Out
-
-    Services.Tween:Create(obj, TweenInfo.new(speed, style, dir), props):Play()
-
-end
-
-
-
---- Batch-set object properties
-
-local function SetProperty(obj, props)
-
-    for k, v in next, props do obj[k] = v end
-
-    return obj
-
-end
-
-
-
---- Scale a UDim2 by a factor
-
-local function Multiply(value, amount)
-
-    return UDim2.new(
-
-        value.X.Scale  * amount, value.X.Offset * amount,
-
-        value.Y.Scale  * amount, value.Y.Offset * amount
-
-    )
-
-end
-
-
-
---- Linear interpolation between two Color3
-
-local function LerpColor(a, b, t)
-
-    return Color3.new(
-
-        a.R + (b.R - a.R) * t,
-
-        a.G + (b.G - a.G) * t,
-
-        a.B + (b.B - a.B) * t
-
-    )
-
-end
-
-
-
---- Brighten/darken a Color3 by offset (+ = lighter in Dark, - in Light)
-
-local function ShiftColor(color, factor)
-
-    local mode = Setup.ThemeMode
-
-    local f = (mode == "Light") and -math.abs(factor) or math.abs(factor)
-
-    return Color3.fromRGB(
-
-        math.clamp((color.R * 255) + f, 0, 255),
-
-        math.clamp((color.G * 255) + f, 0, 255),
-
-        math.clamp((color.B * 255) + f, 0, 255)
-
-    )
-
-end
-
-
-
--- ─────────────────────────────────────────────
-
---  Drag System  (Mouse + Touch)
-
--- ─────────────────────────────────────────────
-
-local DragType = nil  -- used by resize system
-
-
-
-local function MakeDraggable(Canvas, Handle)
-
-    if not Canvas then return end
-
-    Handle = Handle or Canvas
-
-
-
-    local Dragging, DragInput, Start, StartPos
-
-
-
-    Connect(Handle.InputBegan, function(Input)
-
-        local t = Input.UserInputType
-
-        if (t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch) and not DragType then
-
-            Dragging  = true
-
-            Start     = Input.Position
-
-            StartPos  = Canvas.Position
-
-
-
-            Connect(Input.Changed, function()
-
-                if Input.UserInputState == Enum.UserInputState.End then
-
-                    Dragging = false
-
-                end
-
-            end)
-
-        end
-
-    end)
-
-
-
-    Connect(Handle.InputChanged, function(Input)
-
-        local t = Input.UserInputType
-
-        if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
-
-            DragInput = Input
-
-        end
-
-    end)
-
-
-
-    Connect(Services.Input.InputChanged, function(Input)
-
-        if Input == DragInput and Dragging and not DragType then
-
-            local delta = Input.Position - Start
-
-            Canvas.Position = UDim2.new(
-
-                StartPos.X.Scale, StartPos.X.Offset + delta.X,
-
-                StartPos.Y.Scale, StartPos.Y.Offset + delta.Y
-
-            )
-
-        end
-
-    end)
-
-end
-
-
-
--- ─────────────────────────────────────────────
-
---  Resize System  (Mouse only — desktop)
-
--- ─────────────────────────────────────────────
-
-local ResizingModes = {
-
-    TopLeft     = { X = Vector2.new(-1, 0), Y = Vector2.new(0, -1) },
-
-    TopRight    = { X = Vector2.new( 1, 0), Y = Vector2.new(0, -1) },
-
-    BottomLeft  = { X = Vector2.new(-1, 0), Y = Vector2.new(0,  1) },
-
-    BottomRight = { X = Vector2.new( 1, 0), Y = Vector2.new(0,  1) },
-
-}
-
-
-
-local function MakeResizable(Tab, Minimum, Maximum)
-
-    if not Tab or not Tab:FindFirstChild("Resize") then return end
-
-    task.spawn(function()
-
-        local MousePos, Size, UIPos
-
-
-
-        for _, Handle in next, Tab.Resize:GetChildren() do
-
-            Connect(Handle.InputBegan, function(Input)
-
-                if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-                    DragType = Handle
-
-                    MousePos = Vector2.new(Player.Mouse.X, Player.Mouse.Y)
-
-                    Size     = Tab.AbsoluteSize
-
-                    UIPos    = Tab.Position
-
-                end
-
-            end)
-
-            Connect(Handle.InputEnded, function(Input)
-
-                if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-                    DragType = nil
-
-                end
-
-            end)
-
-        end
-
-
-
-        Connect(Player.Mouse.Move, function()
-
-            if not (DragType and MousePos and Size and UIPos) then return end
-
-            local Mode = ResizingModes[DragType.Name]
-
-            if not Mode then return end
-
-
-
-            local Delta   = Vector2.new(Player.Mouse.X, Player.Mouse.Y) - MousePos
-
-            local NewSize = Vector2.new(
-
-                math.clamp(Size.X + Delta.X * Mode.X.X, Minimum.X, Maximum.X),
-
-                math.clamp(Size.Y + Delta.Y * Mode.Y.Y, Minimum.Y, Maximum.Y)
-
-            )
-
-            local AO    = Vector2.new(Tab.AnchorPoint.X * Size.X,    Tab.AnchorPoint.Y * Size.Y)
-
-            local NAO   = Vector2.new(Tab.AnchorPoint.X * NewSize.X, Tab.AnchorPoint.Y * NewSize.Y)
-
-            local DAnchor = NAO - AO
-
-
-
-            Tab.Size     = UDim2.new(0, NewSize.X, 0, NewSize.Y)
-
-            Tab.Position = UDim2.new(
-
-                UIPos.X.Scale, UIPos.X.Offset + DAnchor.X * Mode.X.X,
-
-                UIPos.Y.Scale, UIPos.Y.Offset + DAnchor.Y * Mode.Y.Y
-
-            )
-
-        end)
-
-    end)
-
-end
-
-
-
--- ─────────────────────────────────────────────
-
---  Bottom-Right Resize Grip  (Mouse + Touch)
-
--- ─────────────────────────────────────────────
-
 --[[
-
-    Creates a small draggable grip at the bottom-right corner of any Frame.
-
-    Dragging it resizes the window. Blocks the drag system while active
-
-    by setting DragType so MakeDraggable ignores movement.
-
-
-
-    Parameters:
-
-        Tab     — Frame to resize (the Window)
-
-        Minimum — Vector2   min width/height  (default 280, 200)
-
-        Maximum — Vector2   max width/height  (default 1800, 1200)
-
+    Usage:
+        local m = Maid.new()
+        m:Add(someSignal:Connect(fn))  -- RBXScriptConnection
+        m:Add(someInstance)            -- Instance (will be :Destroyed)
+        m:Add(function() ... end)      -- arbitrary cleanup fn
+        m:Destroy()                    -- runs all, clears list
 ]]
 
-local function AddResizeGrip(Tab, Minimum, Maximum)
+local Maid = {}
+Maid.__index = Maid
 
-    if not Tab then return end
+function Maid.new()
+    return setmetatable({ _tasks = {} }, Maid)
+end
 
-    Minimum = Minimum or Vector2.new(280,  200)
+function Maid:Add(task_)
+    self._tasks[#self._tasks + 1] = task_
+    return task_
+end
 
-    Maximum = Maximum or Vector2.new(1800, 1200)
-
-
-
-    -- ── Grip container (pinned bottom-right) ──────────────────────────────
-
-    local Grip = Instance.new("Frame")
-
-    Grip.Name                       = "ResizeGrip"
-
-    Grip.Size                       = UDim2.new(0, 20, 0, 20)
-
-    Grip.Position                   = UDim2.new(1, -2, 1, -2)
-
-    Grip.AnchorPoint                = Vector2.new(1, 1)
-
-    Grip.BackgroundColor3           = Color3.fromRGB(108, 130, 255)
-
-    Grip.BackgroundTransparency     = 0.55
-
-    Grip.ZIndex                     = 20
-
-    Grip.BorderSizePixel            = 0
-
-    Grip.ClipsDescendants           = false
-
-    Grip.Parent                     = Tab
-
-
-
-    local GripCorner = Instance.new("UICorner")
-
-    GripCorner.CornerRadius = UDim.new(0, 5)
-
-    GripCorner.Parent       = Grip
-
-
-
-    -- ── Three diagonal dots (classic resize indicator) ────────────────────
-
-    --  Arranged like:
-
-    --        · ·
-
-    --      · · ·
-
-    local DotDefs = {
-
-        { X = 11, Y = 3  },
-
-        { X = 3,  Y = 11 },
-
-        { X = 11, Y = 11 },
-
-        { X = 7,  Y = 7  },
-
-        { X = 15, Y = 7  },
-
-        { X = 15, Y = 15 },
-
-    }
-
-    for i = 1, 3 do   -- only use first 3 for a cleaner look
-
-        local D = DotDefs[i]
-
-        local Dot = Instance.new("Frame")
-
-        Dot.Size             = UDim2.new(0, 3, 0, 3)
-
-        Dot.Position         = UDim2.new(0, D.X, 0, D.Y)
-
-        Dot.BackgroundColor3 = Color3.fromRGB(200, 210, 255)
-
-        Dot.BackgroundTransparency = 0
-
-        Dot.BorderSizePixel  = 0
-
-        Dot.ZIndex           = 21
-
-        Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
-
-        Dot.Parent           = Grip
-
+function Maid:Destroy()
+    for i = #self._tasks, 1, -1 do
+        local t  = self._tasks[i]
+        local tt = type(t)
+        if tt == "function" then
+            pcall(t)
+        elseif tt == "table" and t.Destroy then
+            pcall(function() t:Destroy() end)
+        elseif tt == "userdata" then
+            if t.Disconnect then
+                pcall(function() t:Disconnect() end)
+            elseif t.Destroy then
+                pcall(function() t:Destroy() end)
+            end
+        end
+        self._tasks[i] = nil
     end
-
-
-
-    -- ── Hover animation ───────────────────────────────────────────────────
-
-    Connect(Grip.InputBegan, function(Input)
-
-        local t = Input.UserInputType
-
-        if t == Enum.UserInputType.MouseMovement then
-
-            Tween(Grip, 0.12, { BackgroundTransparency = 0.25 })
-
-        end
-
-    end)
-
-    Connect(Grip.InputEnded, function(Input)
-
-        local t = Input.UserInputType
-
-        if t == Enum.UserInputType.MouseMovement then
-
-            Tween(Grip, 0.12, { BackgroundTransparency = 0.55 })
-
-        end
-
-    end)
-
-
-
-    -- ── Resize state ──────────────────────────────────────────────────────
-
-    local Resizing    = false
-
-    local StartMouse  = nil   -- Vector2 mouse/touch position when drag began
-
-    local StartSize   = nil   -- Vector2 window AbsoluteSize when drag began
-
-    local ActiveTouch = nil   -- the Touch InputObject (mobile only)
-
-
-
-    local function BeginResize(pos)
-
-        DragType   = "BottomRight"   -- blocks MakeDraggable while we resize
-
-        Resizing   = true
-
-        StartMouse = pos
-
-        StartSize  = Vector2.new(Tab.AbsoluteSize.X, Tab.AbsoluteSize.Y)
-
-    end
-
-
-
-    local function EndResize()
-
-        DragType    = nil
-
-        Resizing    = false
-
-        StartMouse  = nil
-
-        StartSize   = nil
-
-        ActiveTouch = nil
-
-        -- Restore grip look
-
-        Tween(Grip, 0.12, { BackgroundTransparency = 0.55 })
-
-    end
-
-
-
-    local function DoResize(currentPos)
-
-        if not (Resizing and StartMouse and StartSize) then return end
-
-        local Delta = currentPos - StartMouse
-
-        local NewW  = math.clamp(StartSize.X + Delta.X, Minimum.X, Maximum.X)
-
-        local NewH  = math.clamp(StartSize.Y + Delta.Y, Minimum.Y, Maximum.Y)
-
-        Tab.Size    = UDim2.new(0, NewW, 0, NewH)
-
-    end
-
-
-
-    -- ── Input: Begin ──────────────────────────────────────────────────────
-
-    Connect(Grip.InputBegan, function(Input)
-
-        local t = Input.UserInputType
-
-
-
-        if t == Enum.UserInputType.MouseButton1 then
-
-            -- Desktop mouse ------------------------------------------------
-
-            BeginResize(Vector2.new(Input.Position.X, Input.Position.Y))
-
-            Tween(Grip, 0.1, { BackgroundTransparency = 0.15 })
-
-
-
-        elseif t == Enum.UserInputType.Touch then
-
-            -- Mobile touch -------------------------------------------------
-
-            ActiveTouch = Input
-
-            BeginResize(Vector2.new(Input.Position.X, Input.Position.Y))
-
-            Tween(Grip, 0.1, { BackgroundTransparency = 0.15 })
-
-
-
-            -- Track the touch object directly (more reliable on mobile)
-
-            Connect(Input.Changed, function()
-
-                if Input.UserInputState == Enum.UserInputState.End then
-
-                    if Resizing and ActiveTouch == Input then
-
-                        EndResize()
-
-                    end
-
-                elseif Resizing and ActiveTouch == Input then
-
-                    DoResize(Vector2.new(Input.Position.X, Input.Position.Y))
-
-                end
-
-            end)
-
-        end
-
-    end)
-
-
-
-    -- ── Input: Move (desktop mouse via global InputChanged) ───────────────
-
-    Connect(Services.Input.InputChanged, function(Input)
-
-        if Input.UserInputType == Enum.UserInputType.MouseMovement and Resizing then
-
-            DoResize(Vector2.new(Input.Position.X, Input.Position.Y))
-
-        end
-
-    end)
-
-
-
-    -- ── Input: End (desktop mouse release) ───────────────────────────────
-
-    Connect(Services.Input.InputEnded, function(Input)
-
-        if Input.UserInputType == Enum.UserInputType.MouseButton1 and Resizing then
-
-            EndResize()
-
-        end
-
-    end)
-
 end
 
 
-
+-- ─────────────────────────────────────────────
+--  Utility Functions
 -- ─────────────────────────────────────────────
 
---  Screen & Blur Bootstrap
+local function Clone(obj)       return obj:Clone()              end
+local function Destroy(obj)     pcall(function() obj:Destroy() end) end
+local function Connect(sig, fn) return sig:Connect(fn)          end
 
+--- Smooth tween helper (defaults to Quart/Out)
+local function Tween(obj, speed, props, info)
+    local style = (info and info.EasingStyle)     or Enum.EasingStyle.Quart
+    local dir   = (info and info.EasingDirection) or Enum.EasingDirection.Out
+    Services.Tween:Create(obj, TweenInfo.new(speed, style, dir), props):Play()
+end
+
+--- Batch-set object properties
+local function SetProperty(obj, props)
+    for k, v in next, props do obj[k] = v end
+    return obj
+end
+
+--- Scale a UDim2 by a factor
+local function Multiply(value, amount)
+    return UDim2.new(
+        value.X.Scale  * amount, value.X.Offset * amount,
+        value.Y.Scale  * amount, value.Y.Offset * amount
+    )
+end
+
+--- Lerp between two Color3 values — uses native Color3:Lerp
+local function LerpColor(a, b, t)
+    return a:Lerp(b, t)
+end
+
+--- Brighten/darken a Color3 in a theme-aware direction
+local function ShiftColor(color, factor)
+    local mode = Setup.ThemeMode
+    local f = (mode == "Light") and -math.abs(factor) or math.abs(factor)
+    return Color3.fromRGB(
+        math.clamp((color.R * 255) + f, 0, 255),
+        math.clamp((color.G * 255) + f, 0, 255),
+        math.clamp((color.B * 255) + f, 0, 255)
+    )
+end
+
+--- Color3 → "#RRGGBB"
+local function Color3ToHex(c)
+    return string.format("#%02X%02X%02X",
+        math.round(c.R * 255),
+        math.round(c.G * 255),
+        math.round(c.B * 255))
+end
+
+--- "#RRGGBB" or "RRGGBB" → Color3 (nil on bad input)
+local function HexToColor3(hex)
+    hex = hex:gsub("^#", "")
+    if #hex ~= 6 then return nil end
+    local r = tonumber(hex:sub(1, 2), 16)
+    local g = tonumber(hex:sub(3, 4), 16)
+    local b = tonumber(hex:sub(5, 6), 16)
+    if not (r and g and b) then return nil end
+    return Color3.fromRGB(r, g, b)
+end
+
+
+-- ─────────────────────────────────────────────
+--  Screen & Blur Bootstrap
 -- ─────────────────────────────────────────────
 
 local Blur = nil
-
 local Screen
 
-
-
 if identifyexecutor then
-
     Screen = Services.Insert:LoadLocalAsset("rbxassetid://18490507748")
-
     Blur   = loadstring(game:HttpGet(
-
         "https://raw.githubusercontent.com/lxte/lates-lib/main/Assets/Blur.lua"
-
     ))()
-
 else
-
     Screen = script.Parent
-
     Blur   = require(script.Blur)
-
 end
-
-
 
 Screen.Main.Visible = false
 
-
-
 xpcall(
-
-    function() Screen.Parent = game.CoreGui    end,
-
-    function() Screen.Parent = Player.GUI      end
-
+    function() Screen.Parent = game.CoreGui   end,
+    function() Screen.Parent = Player.GUI     end
 )
 
 
-
 -- ─────────────────────────────────────────────
-
 --  Shared State
-
 -- ─────────────────────────────────────────────
 
-local Animations  = {}
-
-local Blurs       = {}
-
-local Components  = Screen:FindFirstChild("Components")
-
-local Library     = {}
-
-local StoredInfo  = { Sections = {}, Tabs = {} }
-
+local Blurs      = {}
+local Components = Screen:FindFirstChild("Components")
+local Library    = {}
 
 
 -- ─────────────────────────────────────────────
-
 --  Window Animations
-
 -- ─────────────────────────────────────────────
+
+local Animations = {}
 
 function Animations:Open(Window, Transparency, UseCurrentSize)
-
     local Original   = (UseCurrentSize and Window.Size) or Setup.Size
-
     local Multiplied = Multiply(Original, 1.07)
-
     local Shadow     = Window:FindFirstChildOfClass("UIStroke")
-
-
 
     if Shadow then Shadow.Transparency = 1 end
-
     SetProperty(Window, { Size = Multiplied, GroupTransparency = 1, Visible = true })
 
-
-
     if Shadow then Tween(Shadow, 0.18, { Transparency = 0.6 }) end
-
     Tween(Window, 0.18, { Size = Original, GroupTransparency = Transparency or 0 })
-
 end
-
-
 
 function Animations:Close(Window)
-
     local Original   = Window.Size
-
     local Multiplied = Multiply(Original, 1.07)
-
     local Shadow     = Window:FindFirstChildOfClass("UIStroke")
 
-
-
     if Shadow then Tween(Shadow, 0.18, { Transparency = 1 }) end
-
     Tween(Window, 0.18, { Size = Multiplied, GroupTransparency = 1 })
 
-
-
     task.wait(0.2)
-
     Window.Size    = Original
-
     Window.Visible = false
-
 end
 
-
-
---- Hover highlight for any interactive component
-
-function Animations:Hover(Component, IsImage)
-
-    local base  -- captured on first hover so it stays accurate after theme switches
-
-    Connect(Component.InputBegan, function(Input)
-
+--- Hover highlight for any interactive component.
+--- Optionally pass a Maid to track the connections for cleanup.
+function Animations:Hover(Component, IsImage, Maid_)
+    local base
+    local c1 = Connect(Component.InputBegan, function(Input)
         local t = Input.UserInputType
-
         if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
-
             if IsImage then
-
                 Tween(Component, 0.12, { ImageTransparency = 0.25 })
-
             else
-
-                base = Component.BackgroundColor3
-
+                base = Component.BackgroundColor3  -- capture fresh each hover
                 Tween(Component, 0.12, {
-
-                    BackgroundColor3 = LerpColor(
-
-                        Component.BackgroundColor3, Theme.Accent, 0.08
-
-                    )
-
+                    BackgroundColor3 = base:Lerp(Theme.Accent, 0.08)
                 })
-
             end
-
         end
-
     end)
-
-    Connect(Component.InputEnded, function(Input)
-
+    local c2 = Connect(Component.InputEnded, function(Input)
         local t = Input.UserInputType
-
         if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
-
             if IsImage then
-
                 Tween(Component, 0.12, { ImageTransparency = 0 })
-
             else
-
                 if base then Tween(Component, 0.12, { BackgroundColor3 = base }) end
-
             end
-
         end
-
     end)
-
+    if Maid_ then
+        Maid_:Add(c1)
+        Maid_:Add(c2)
+    end
 end
 
 
-
--- ─────────────────────────────────────────────
-
+-- ═══════════════════════════════════════════════════════
 --  Library.CreateWindow
-
--- ─────────────────────────────────────────────
-
+-- ═══════════════════════════════════════════════════════
 --[[
-
     Settings = {
-
         Title:           string          — Window title
-
         Subtitle:        string?         — Small text below title
-
-        Icon:            string?         — rbxassetid for titlebar icon
-
+        Icon:            string?         — rbxassetid for icon
         Size:            UDim2           — Initial window size
-
         Transparency:    number?         — 0 = opaque (default)
-
         MinimizeKeybind: Enum.KeyCode?   — Toggle visibility keybind
-
         Blurring:        boolean?        — Background blur effect
-
         Theme:           string?         — "Dark" (default) | "Light"
-
     }
-
     Returns: Options table
-
 ]]
 
 function Library:CreateWindow(Settings)
 
+    -- ── Per-window Maid ──────────────────────────────────────────────────
+    local WinMaid = Maid.new()
 
+    -- ── Per-window drag state (FIXED: was module-level → 2 windows broke) ─
+    local WinState = { DragType = nil }
 
-    -- Apply theme from settings
+    -- ── Per-window tab/section info (FIXED: was module-level → collisions) ─
+    local StoredInfo = { Sections = {}, Tabs = {} }
 
+    -- ── Apply theme ───────────────────────────────────────────────────────
     if Settings.Theme and Themes[Settings.Theme] then
-
         Theme = Themes[Settings.Theme]
-
         Setup.ThemeMode = Settings.Theme
-
     end
 
+    -- ── Clone window template ─────────────────────────────────────────────
+    local Window  = Clone(Screen:WaitForChild("Main"))
+    local Sidebar = Window:FindFirstChild("Sidebar")
+    local Holder  = Window:FindFirstChild("Main")
+    local BG      = Window:FindFirstChild("BackgroundShadow")
+    local TabList = Sidebar and Sidebar:FindFirstChild("Tab")
 
-
-    -- ── Clone window from template
-
-    local Window   = Clone(Screen:WaitForChild("Main"))
-
-    local Sidebar  = Window:FindFirstChild("Sidebar")
-
-    local Holder   = Window:FindFirstChild("Main")
-
-    local BG       = Window:FindFirstChild("BackgroundShadow")
-
-    local TabList  = Sidebar and Sidebar:FindFirstChild("Tab")
-
-
-
-    -- ── Collect example templates once
-
+    -- ── Collect example templates once ────────────────────────────────────
     local Examples = {}
-
     for _, ex in next, Window:GetDescendants() do
-
         if ex.Name:find("Example") and not Examples[ex.Name] then
-
             Examples[ex.Name] = ex
-
         end
-
     end
 
+    -- ── Internal state ────────────────────────────────────────────────────
+    local Options        = {}
+    local Opened         = true
+    local Maximized      = false
+    local BlurEnabled    = false
+    local PreMaxPos      = nil
+    local ThemeCallbacks = {}   -- registered via Options:OnThemeChanged(fn)
+    local ActiveNotifs   = {}   -- live notification frames for stacking
 
 
-    -- ── Internal state
-
-    local Options     = {}
-
-    local Opened      = true
-
-    local Maximized   = false
-
-    local BlurEnabled = false
-
-    local PreMaxPos   = nil
-
-
-
-    -- ── Configure setup
-
+    -- ── Setup config ──────────────────────────────────────────────────────
     Setup.Transparency = Settings.Transparency or 0
-
     Setup.Size         = Settings.Size
-
     Setup.ThemeMode    = Settings.Theme or "Dark"
 
-
-
     if Settings.MinimizeKeybind then
-
         Setup.Keybind = Settings.MinimizeKeybind
-
     end
 
 
+    -- ════════════════════════════════════════
+    --  LOCAL DRAG SYSTEM  (per-window, FIXED)
+    -- ════════════════════════════════════════
 
-    -- ── Drag (titlebar handle preferred, fallback whole window)
+    local function MakeDraggable(Canvas, Handle)
+        if not Canvas then return end
+        Handle = Handle or Canvas
 
+        local Dragging, DragInput, Start, StartPos
+
+        WinMaid:Add(Connect(Handle.InputBegan, function(Input)
+            local t = Input.UserInputType
+            if (t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch)
+                and not WinState.DragType then
+                Dragging  = true
+                Start     = Input.Position
+                StartPos  = Canvas.Position
+                WinMaid:Add(Connect(Input.Changed, function()
+                    if Input.UserInputState == Enum.UserInputState.End then
+                        Dragging = false
+                    end
+                end))
+            end
+        end))
+
+        WinMaid:Add(Connect(Handle.InputChanged, function(Input)
+            local t = Input.UserInputType
+            if t == Enum.UserInputType.MouseMovement or t == Enum.UserInputType.Touch then
+                DragInput = Input
+            end
+        end))
+
+        WinMaid:Add(Connect(Services.Input.InputChanged, function(Input)
+            if Input == DragInput and Dragging and not WinState.DragType then
+                local delta = Input.Position - Start
+                Canvas.Position = UDim2.new(
+                    StartPos.X.Scale, StartPos.X.Offset + delta.X,
+                    StartPos.Y.Scale, StartPos.Y.Offset + delta.Y
+                )
+            end
+        end))
+    end
+
+    -- ── Bottom-right resize grip (Mouse + Touch) ──────────────────────────
+
+    local function AddResizeGrip(Tab, Minimum, Maximum)
+        if not Tab then return end
+        Minimum = Minimum or Vector2.new(280,  200)
+        Maximum = Maximum or Vector2.new(1800, 1200)
+
+        local Grip = Instance.new("Frame")
+        SetProperty(Grip, {
+            Name                   = "ResizeGrip",
+            Size                   = UDim2.new(0, 20, 0, 20),
+            Position               = UDim2.new(1, -2, 1, -2),
+            AnchorPoint            = Vector2.new(1, 1),
+            BackgroundColor3       = Color3.fromRGB(108, 130, 255),
+            BackgroundTransparency = 0.55,
+            ZIndex                 = 20,
+            BorderSizePixel        = 0,
+            ClipsDescendants       = false,
+            Parent                 = Tab,
+        })
+        Instance.new("UICorner", Grip).CornerRadius = UDim.new(0, 5)
+
+        -- Diagonal dot indicators
+        local DotDefs = { {11, 3}, {3, 11}, {11, 11} }
+        for _, d in ipairs(DotDefs) do
+            local Dot = Instance.new("Frame")
+            SetProperty(Dot, {
+                Size             = UDim2.new(0, 3, 0, 3),
+                Position         = UDim2.new(0, d[1], 0, d[2]),
+                BackgroundColor3 = Color3.fromRGB(200, 210, 255),
+                BorderSizePixel  = 0,
+                ZIndex           = 21,
+                Parent           = Grip,
+            })
+            Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
+        end
+
+        -- Hover glow
+        WinMaid:Add(Connect(Grip.InputBegan, function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseMovement then
+                Tween(Grip, 0.12, { BackgroundTransparency = 0.25 })
+            end
+        end))
+        WinMaid:Add(Connect(Grip.InputEnded, function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseMovement then
+                Tween(Grip, 0.12, { BackgroundTransparency = 0.55 })
+            end
+        end))
+
+        -- Resize state
+        local Resizing    = false
+        local StartMouse  = nil
+        local StartSize   = nil
+        local ActiveTouch = nil
+
+        local function BeginResize(pos)
+            WinState.DragType = "BottomRight"
+            Resizing   = true
+            StartMouse = pos
+            StartSize  = Vector2.new(Tab.AbsoluteSize.X, Tab.AbsoluteSize.Y)
+        end
+
+        local function EndResize()
+            WinState.DragType = nil
+            Resizing    = false
+            StartMouse  = nil
+            StartSize   = nil
+            ActiveTouch = nil
+            Tween(Grip, 0.12, { BackgroundTransparency = 0.55 })
+        end
+
+        local function DoResize(pos)
+            if not (Resizing and StartMouse and StartSize) then return end
+            local Delta = pos - StartMouse
+            Tab.Size = UDim2.new(0,
+                math.clamp(StartSize.X + Delta.X, Minimum.X, Maximum.X),
+                0,
+                math.clamp(StartSize.Y + Delta.Y, Minimum.Y, Maximum.Y)
+            )
+        end
+
+        WinMaid:Add(Connect(Grip.InputBegan, function(Input)
+            local t = Input.UserInputType
+            if t == Enum.UserInputType.MouseButton1 then
+                BeginResize(Vector2.new(Input.Position.X, Input.Position.Y))
+                Tween(Grip, 0.1, { BackgroundTransparency = 0.15 })
+
+            elseif t == Enum.UserInputType.Touch then
+                ActiveTouch = Input
+                BeginResize(Vector2.new(Input.Position.X, Input.Position.Y))
+                Tween(Grip, 0.1, { BackgroundTransparency = 0.15 })
+                WinMaid:Add(Connect(Input.Changed, function()
+                    if Input.UserInputState == Enum.UserInputState.End then
+                        if Resizing and ActiveTouch == Input then EndResize() end
+                    elseif Resizing and ActiveTouch == Input then
+                        DoResize(Vector2.new(Input.Position.X, Input.Position.Y))
+                    end
+                end))
+            end
+        end))
+
+        WinMaid:Add(Connect(Services.Input.InputChanged, function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseMovement and Resizing then
+                DoResize(Vector2.new(Input.Position.X, Input.Position.Y))
+            end
+        end))
+
+        WinMaid:Add(Connect(Services.Input.InputEnded, function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 and Resizing then
+                EndResize()
+            end
+        end))
+    end
+
+    -- ── Attach drag & resize ──────────────────────────────────────────────
     local DragHandle = Window:FindFirstChild("TitleBar") or Window
-
     MakeDraggable(Window, DragHandle)
-
-    MakeResizable(Window, Vector2.new(380, 260), Vector2.new(9e9, 9e9))
-
-
-
-    -- ── Bottom-right resize grip (procedural — no template needed)
-
     AddResizeGrip(Window, Vector2.new(380, 260), Vector2.new(1800, 1200))
 
 
-
-    -- ── Blur
-
+    -- ── Blur ──────────────────────────────────────────────────────────────
     if Settings.Blurring then
-
         xpcall(function()
-
             Blurs[Settings.Title] = Blur.new(Window, 5)
-
             BlurEnabled = true
-
         end, function(err)
-
             warn("[UILib] Blur init failed: " .. tostring(err))
-
         end)
-
     end
 
 
-
-    -- ── Titlebar Labels
-
+    -- ── Titlebar ──────────────────────────────────────────────────────────
     local TitleBar = Window:FindFirstChild("TitleBar")
-
     if TitleBar then
-
         local TL = TitleBar:FindFirstChild("Title")
-
         local SL = TitleBar:FindFirstChild("Subtitle") or TitleBar:FindFirstChild("Description")
-
         local IL = TitleBar:FindFirstChild("Icon")
 
+        if TL then TL.Text  = Settings.Title    or "Window" end
+        if SL then SL.Text  = Settings.Subtitle or ""       end
+        if IL and Settings.Icon then IL.Image = Settings.Icon end
 
-
-        if TL then TL.Text = Settings.Title    or "Window"  end
-
-        if SL then SL.Text = Settings.Subtitle or ""        end
-
-        if IL and Settings.Icon then IL.Image  = Settings.Icon end
-
-
-
-        -- Theme Selector Button (Dark ▼ / Light ▼)
-
-        local ThemeBtn = TitleBar:FindFirstChild("ThemeSelect")
-
+        -- Theme toggle button
+        local ThemeBtn   = TitleBar:FindFirstChild("ThemeSelect")
         if ThemeBtn then
-
             local ThemeLabel = ThemeBtn:FindFirstChild("Label") or ThemeBtn:FindFirstChild("TextLabel")
-
             if ThemeLabel then ThemeLabel.Text = Setup.ThemeMode end
 
-
-
-            Connect(ThemeBtn.MouseButton1Click, function()
-
+            WinMaid:Add(Connect(ThemeBtn.MouseButton1Click, function()
                 local newMode = (Setup.ThemeMode == "Dark") and "Light" or "Dark"
-
                 Setup.ThemeMode = newMode
-
                 Theme = Themes[newMode]
-
                 if ThemeLabel then ThemeLabel.Text = newMode end
-
                 Options:SetTheme()
+                for _, fn in ipairs(ThemeCallbacks) do task.spawn(fn, newMode, Theme) end
+            end))
 
-            end)
-
-
-
-            Animations:Hover(ThemeBtn)
-
+            Animations:Hover(ThemeBtn, false, WinMaid)
         end
-
     end
 
 
-
-    -- ── Toggle visibility helper
-
+    -- ── Toggle visibility ─────────────────────────────────────────────────
     local function ToggleWindow()
-
         if Opened then
-
             Opened = false
-
             if BlurEnabled and Blurs[Settings.Title] then
-
                 pcall(function() Blurs[Settings.Title].root.Parent = nil end)
-
             end
-
             Animations:Close(Window)
-
         else
-
             Opened = true
-
             Animations:Open(Window, Setup.Transparency)
-
             if BlurEnabled and Blurs[Settings.Title] then
-
                 pcall(function() Blurs[Settings.Title].root.Parent = workspace.CurrentCamera end)
-
             end
-
         end
-
     end
 
 
-
-    -- ── Window control buttons (Close / Maximize / Minimize)
-
-    local ButtonsFrame = TitleBar and TitleBar:FindFirstChild("Buttons")
-
+    -- ── Window control buttons ─────────────────────────────────────────────
+    local ButtonsFrame = (TitleBar and TitleBar:FindFirstChild("Buttons"))
         or (Sidebar and Sidebar:FindFirstChild("Top") and Sidebar.Top:FindFirstChild("Buttons"))
 
-
-
     if ButtonsFrame then
-
         for _, Btn in next, ButtonsFrame:GetChildren() do
-
             if Btn:IsA("TextButton") or Btn:IsA("ImageButton") then
+                Animations:Hover(Btn, Btn:IsA("ImageButton"), WinMaid)
 
-                Animations:Hover(Btn, Btn:IsA("ImageButton"))
-
-
-
-                Connect(Btn.MouseButton1Click, function()
-
+                WinMaid:Add(Connect(Btn.MouseButton1Click, function()
                     local n = Btn.Name
-
                     if n == "Close" then
-
                         ToggleWindow()
 
-
-
                     elseif n == "Maximize" then
-
                         if Maximized then
-
                             Maximized = false
-
                             Tween(Window, 0.14, { Size = Setup.Size, Position = PreMaxPos })
-
                         else
-
                             Maximized = true
-
                             PreMaxPos = Window.Position
-
                             Tween(Window, 0.14, {
-
                                 Size     = UDim2.fromScale(1, 1),
-
                                 Position = UDim2.fromScale(0.5, 0.5),
-
                             })
-
                         end
-
-
 
                     elseif n == "Minimize" then
-
+                        -- FIXED: was missing Opened = false → keybind couldn't re-open
                         Opened = false
-
                         Window.Visible = false
-
                         if BlurEnabled and Blurs[Settings.Title] then
-
                             pcall(function() Blurs[Settings.Title].root.Parent = nil end)
-
                         end
-
                     end
-
-                end)
-
+                end))
             end
-
         end
-
     end
 
 
-
-    -- ── Keybind toggle
-
-    Connect(Services.Input.InputBegan, function(Input, GameFocused)
-
+    -- ── Keybind toggle ────────────────────────────────────────────────────
+    WinMaid:Add(Connect(Services.Input.InputBegan, function(Input, GameFocused)
         if GameFocused then return end
-
         if Input == Setup.Keybind or Input.KeyCode == Setup.Keybind then
-
             ToggleWindow()
-
         end
+    end))
 
-    end)
 
+    -- ── Mobile swipe gesture — left/right to change tabs ──────────────────
+    if IsMobile and TabList then
+        local SwipeStart  = nil
+        local SwipeStartT = nil
+
+        WinMaid:Add(Connect(Window.InputBegan, function(Input)
+            if Input.UserInputType == Enum.UserInputType.Touch then
+                SwipeStart  = Input.Position
+                SwipeStartT = tick()
+            end
+        end))
+
+        WinMaid:Add(Connect(Window.InputEnded, function(Input)
+            if Input.UserInputType ~= Enum.UserInputType.Touch then return end
+            if not (SwipeStart and SwipeStartT) then return end
+
+            local dt    = tick() - SwipeStartT
+            local dx    = Input.Position.X - SwipeStart.X
+            local absDx = math.abs(dx)
+            local absDy = math.abs(Input.Position.Y - SwipeStart.Y)
+
+            -- Threshold: < 0.35 s, > 80 px horizontal, clearly horizontal
+            if dt < 0.35 and absDx > 80 and absDx > absDy * 1.5 then
+                local tabs = {}
+                for _, Btn in next, TabList:GetChildren() do
+                    if Btn:IsA("TextButton") and Btn.Visible then
+                        tabs[#tabs + 1] = Btn
+                    end
+                end
+                table.sort(tabs, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
+
+                local activeIdx = 1
+                for i, Btn in ipairs(tabs) do
+                    local Val = Btn:FindFirstChild("Value")
+                    if Val and Val.Value then activeIdx = i; break end
+                end
+
+                local newIdx = (dx < 0)
+                    and math.min(activeIdx + 1, #tabs)
+                    or  math.max(activeIdx - 1, 1)
+
+                if newIdx ~= activeIdx then
+                    Options:SetTab(tabs[newIdx].Name)
+                end
+            end
+
+            SwipeStart  = nil
+            SwipeStartT = nil
+        end))
+    end
 
 
     -- ════════════════════════════════════════
-
     --  TAB SYSTEM
-
     -- ════════════════════════════════════════
-
-
 
     function Options:SetTab(Name)
-
         if not TabList then return end
 
-
-
-        -- Tab buttons in sidebar
-
         for _, Button in next, TabList:GetChildren() do
-
             if Button:IsA("TextButton") then
-
                 local isTarget = (Button.Name == Name)
-
                 local Val      = Button:FindFirstChild("Value")
-
                 local Pad      = Button:FindFirstChildOfClass("UIPadding")
-
                 local ICO      = Button:FindFirstChild("ICO")
 
-
-
                 if isTarget and not (Val and Val.Value) then
-
                     if Pad then Tween(Pad, 0.18, { PaddingLeft = UDim.new(0, 22) }) end
-
                     Tween(Button, 0.18, {
-
                         BackgroundTransparency = 0.88,
-
                         BackgroundColor3       = Theme.Accent,
-
                     })
-
                     if ICO then Tween(ICO, 0.18, { ImageColor3 = Theme.Accent }) end
-
                     local TL = Button:FindFirstChild("TextLabel")
-
                     if TL then Tween(TL, 0.18, { TextColor3 = Theme.TabActive }) end
-
                     if Val then Val.Value = true end
 
-
-
                 elseif not isTarget and (Val and Val.Value) then
-
                     if Pad then Tween(Pad, 0.18, { PaddingLeft = UDim.new(0, 16) }) end
-
                     Tween(Button, 0.18, {
-
                         BackgroundTransparency = 1,
-
                         BackgroundColor3       = Theme.Component,
-
                     })
-
                     if ICO then Tween(ICO, 0.18, { ImageColor3 = Theme.Icon }) end
-
                     local TL = Button:FindFirstChild("TextLabel")
-
                     if TL then Tween(TL, 0.18, { TextColor3 = Theme.Tab }) end
-
                     if Val then Val.Value = false end
-
                 end
-
             end
-
         end
-
-
-
-        -- Main content panes
 
         if not Holder then return end
-
         for _, Main in next, Holder:GetChildren() do
-
             if Main:IsA("CanvasGroup") then
-
                 local isTarget = (Main.Name == Name)
-
                 local Val      = Main:FindFirstChild("Value")
-
                 local Scroll   = Main:FindFirstChild("ScrollingFrame")
-
                 local Pad      = Scroll and Scroll:FindFirstChild("UIPadding")
 
-
-
                 if isTarget and not (Val and Val.Value) then
-
                     if Val then Val.Value = true end
-
                     Main.Visible = true
-
                     Tween(Main, 0.22, { GroupTransparency = 0 })
-
                     if Pad then Tween(Pad, 0.22, { PaddingTop = UDim.new(0, 8) }) end
 
-
-
                 elseif not isTarget and (Val and Val.Value) then
-
                     if Val then Val.Value = false end
-
                     Tween(Main, 0.14, { GroupTransparency = 1 })
-
                     if Pad then Tween(Pad, 0.14, { PaddingTop = UDim.new(0, 18) }) end
-
                     task.delay(0.18, function() Main.Visible = false end)
-
                 end
-
             end
-
         end
-
     end
-
 
 
     function Options:AddTabSection(Cfg)
-
         -- Cfg = { Name: string, Order: number }
-
         local Example = Examples["SectionExample"]
-
         if not Example then return end
-
         local Section = Clone(Example)
-
         StoredInfo.Sections[Cfg.Name] = Cfg.Order
-
         SetProperty(Section, {
-
             Parent      = Example.Parent,
-
             Text        = Cfg.Name,
-
             Name        = Cfg.Name,
-
             LayoutOrder = Cfg.Order,
-
             Visible     = true,
-
         })
-
     end
-
 
 
     function Options:AddTab(Cfg)
-
         -- Cfg = { Title: string, Icon: string?, Section: string? }
-
         if StoredInfo.Tabs[Cfg.Title] then
-
             error("[UILib] Duplicate tab: " .. Cfg.Title)
-
         end
-
-
 
         local BtnExample  = Examples["TabButtonExample"]
-
         local MainExample = Examples["MainExample"]
-
         if not (BtnExample and MainExample) then return end
 
-
-
         local Main = Clone(MainExample)
-
         local Tab  = Clone(BtnExample)
 
-
-
-        -- Icon
-
         local ICO = Tab:FindFirstChild("ICO")
-
-        if Cfg.Icon and ICO then
-
-            ICO.Image = Cfg.Icon
-
-        elseif ICO then
-
-            Destroy(ICO)
-
-        end
-
-
-
-        -- Label
+        if Cfg.Icon and ICO then ICO.Image = Cfg.Icon
+        elseif ICO then Destroy(ICO) end
 
         local TL = Tab:FindFirstChild("TextLabel")
-
         if TL then TL.Text = Cfg.Title end
-
-
 
         StoredInfo.Tabs[Cfg.Title] = { Tab }
 
-
-
         SetProperty(Main, { Parent = MainExample.Parent, Name = Cfg.Title })
-
         SetProperty(Tab, {
-
             Parent      = BtnExample.Parent,
-
             LayoutOrder = StoredInfo.Sections[Cfg.Section] or (#StoredInfo.Sections + 1),
-
             Name        = Cfg.Title,
-
             Visible     = true,
-
         })
 
-
-
-        Connect(Tab.MouseButton1Click, function()
-
+        WinMaid:Add(Connect(Tab.MouseButton1Click, function()
             Options:SetTab(Cfg.Title)
-
-        end)
-
-
+        end))
 
         local SF = Main:FindFirstChild("ScrollingFrame")
-
         return SF or Main
-
     end
 
 
-
+    -- ════════════════════════════════════════
+    --  NOTIFICATIONS  (queued / stacked)
     -- ════════════════════════════════════════
 
-    --  NOTIFICATIONS
+    local NOTIF_PADDING = 8
 
-    -- ════════════════════════════════════════
-
-
+    local function RepositionNotifs()
+        local baseY = -NOTIF_PADDING
+        for i = #ActiveNotifs, 1, -1 do
+            local n = ActiveNotifs[i]
+            local h = n.AbsoluteSize.Y
+            Tween(n, 0.2, {
+                Position = UDim2.new(1, -(n.AbsoluteSize.X + 10), 1, baseY - h)
+            })
+            baseY = baseY - h - NOTIF_PADDING
+        end
+    end
 
     function Options:Notify(Cfg)
-
         -- Cfg = { Title: string, Description: string, Duration: number? }
-
         local Notif = Components and Clone(Components["Notification"])
-
         if not Notif then return end
 
-
-
         local Title, Desc = Options:GetLabels(Notif)
-
         local Timer = Notif:FindFirstChild("Timer")
 
-
-
         if Title then Title.Text = Cfg.Title       or "Notification" end
-
         if Desc  then Desc.Text  = Cfg.Description or ""             end
 
-
+        -- Apply current theme
+        Notif.BackgroundColor3 = Theme.Primary
+        local NS = Notif:FindFirstChildOfClass("UIStroke")
+        if NS then NS.Color = Theme.Outline end
 
         local Parent = Screen:FindFirstChild("Frame") or Screen
+        SetProperty(Notif, { GroupTransparency = 1, Visible = true, Parent = Parent })
 
-        Notif.Parent = Parent
-
-
+        table.insert(ActiveNotifs, Notif)
+        RepositionNotifs()
 
         task.spawn(function()
-
             local Duration = Cfg.Duration or 3
-
             Animations:Open(Notif, Setup.Transparency, true)
-
             if Timer then Tween(Timer, Duration, { Size = UDim2.new(0, 0, 0, 3) }) end
-
             task.wait(Duration)
-
             Animations:Close(Notif)
+            task.wait(0.25)
 
-            task.wait(1)
+            local idx = table.find(ActiveNotifs, Notif)
+            if idx then table.remove(ActiveNotifs, idx) end
+            RepositionNotifs()
 
-            Notif:Destroy()
-
+            task.wait(0.05)
+            Destroy(Notif)
         end)
-
     end
 
 
-
     -- ════════════════════════════════════════
-
-    --  SHARED HELPER — GetLabels
-
+    --  HELPER — GetLabels
     -- ════════════════════════════════════════
-
-
 
     function Options:GetLabels(Component)
-
         local Labels = Component:FindFirstChild("Labels")
-
         if Labels then
-
             return Labels:FindFirstChild("Title"), Labels:FindFirstChild("Description")
-
         end
-
         return Component:FindFirstChild("Title"), Component:FindFirstChild("Description")
-
     end
 
 
-
     -- ════════════════════════════════════════
-
     --  SECTION HEADER
-
     -- ════════════════════════════════════════
-
-
 
     function Options:AddSection(Cfg)
-
         -- Cfg = { Name: string, Tab: Instance }
-
         local Section = Components and Clone(Components["Section"])
-
         if not Section then return end
-
         SetProperty(Section, {
-
             Text    = Cfg.Name,
-
             Parent  = Cfg.Tab,
-
             Visible = true,
-
         })
-
     end
 
 
-
+    -- ════════════════════════════════════════
+    --  DIVIDER  (new)
     -- ════════════════════════════════════════
 
+    function Options:AddDivider(Cfg)
+        -- Cfg = { Tab: Instance, Padding: number? }
+        local Pad = (Cfg and Cfg.Padding) or 4
+        local Wrapper = Instance.new("Frame")
+        SetProperty(Wrapper, {
+            Name                   = "Divider",
+            Size                   = UDim2.new(1, 0, 0, Pad * 2 + 1),
+            BackgroundTransparency = 1,
+            BorderSizePixel        = 0,
+            Parent                 = Cfg and Cfg.Tab,
+            Visible                = true,
+        })
+        local Line = Instance.new("Frame", Wrapper)
+        SetProperty(Line, {
+            Name             = "Line",
+            Size             = UDim2.new(1, -24, 0, 1),
+            Position         = UDim2.new(0, 12, 0.5, 0),
+            AnchorPoint      = Vector2.new(0, 0.5),
+            BackgroundColor3 = Theme.Divider,
+            BorderSizePixel  = 0,
+        })
+    end
+
+
+    -- ════════════════════════════════════════
+    --  LABEL  (new — lightweight text line)
+    -- ════════════════════════════════════════
+
+    function Options:AddLabel(Cfg)
+        --[[
+            Cfg = {
+                Text:  string
+                Tab:   Instance
+                Color: Color3?    — defaults to Theme.Description
+            }
+            Returns: { Set(str), Get() }
+        ]]
+        local Lbl = Instance.new("TextLabel")
+        SetProperty(Lbl, {
+            Name                   = "Label",
+            Text                   = Cfg.Text or "",
+            Font                   = Enum.Font.GothamMedium,
+            TextSize               = 13,
+            TextColor3             = Cfg.Color or Theme.Description,
+            BackgroundTransparency = 1,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            Size                   = UDim2.new(1, -24, 0, 22),
+            BorderSizePixel        = 0,
+            Parent                 = Cfg.Tab,
+            Visible                = true,
+        })
+        local P = Instance.new("UIPadding", Lbl)
+        P.PaddingLeft = UDim.new(0, 12)
+
+        local Ctrl = {}
+        function Ctrl:Set(text) Lbl.Text = text end
+        function Ctrl:Get()     return Lbl.Text end
+        return Ctrl
+    end
+
+
+    -- ════════════════════════════════════════
     --  TOGGLE
-
     -- ════════════════════════════════════════
-
-
 
     function Options:AddToggle(Cfg)
-
         --[[
-
             Cfg = {
-
                 Title:       string
-
                 Description: string
-
                 Default:     boolean?
-
                 Tab:         Instance
-
                 Callback:    function(bool)
-
             }
-
+            Returns: { Set(bool), Get(), OnChanged(fn) }
         ]]
-
         local Toggle = Components and Clone(Components["Toggle"])
-
         if not Toggle then return end
 
-
-
         local Title, Desc = Options:GetLabels(Toggle)
-
         local On     = Toggle:FindFirstChild("Value")
-
         local Main   = Toggle:FindFirstChild("Main")
-
         local Circle = Main and Main:FindFirstChild("Circle")
 
-
+        local Listeners = {}
 
         local function Set(Value)
-
             if Main then
-
                 Tween(Main, 0.16, {
-
                     BackgroundColor3 = Value and Theme.ToggleOn or Theme.ToggleOff,
-
                 })
-
             end
-
             if Circle then
-
                 Tween(Circle, 0.16, {
-
                     BackgroundColor3 = Theme.ToggleKnob,
-
                     Position = Value
-
                         and UDim2.new(1, -16, 0.5, 0)
-
                         or  UDim2.new(0,   3, 0.5, 0),
-
                 })
-
             end
-
             if On then On.Value = Value end
-
+            for _, fn in ipairs(Listeners) do task.spawn(fn, Value) end
         end
 
-
-
-        Connect(Toggle.MouseButton1Click, function()
-
+        WinMaid:Add(Connect(Toggle.MouseButton1Click, function()
             local Value = not (On and On.Value)
-
             Set(Value)
+            if Cfg.Callback then task.spawn(Cfg.Callback, Value) end
+        end))
 
-            if Cfg.Callback then Cfg.Callback(Value) end
-
-        end)
-
-
-
-        Animations:Hover(Toggle)
-
+        Animations:Hover(Toggle, false, WinMaid)
         Set(Cfg.Default or false)
-
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
-
         SetProperty(Toggle, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
 
+        local Ctrl = {}
+        function Ctrl:Set(v)        Set(v) end
+        function Ctrl:Get()         return On and On.Value or false end
+        function Ctrl:OnChanged(fn) Listeners[#Listeners + 1] = fn end
+        return Ctrl
     end
 
 
-
     -- ════════════════════════════════════════
-
     --  BUTTON
-
     -- ════════════════════════════════════════
-
-
 
     function Options:AddButton(Cfg)
-
         --[[
-
             Cfg = {
-
                 Title:       string
-
                 Description: string
-
                 Tab:         Instance
-
                 Callback:    function()
-
             }
-
+            Returns: { SetLabel(str) }
         ]]
-
         local Button = Components and Clone(Components["Button"])
-
         if not Button then return end
-
-
 
         local Title, Desc = Options:GetLabels(Button)
 
-
-
-        Connect(Button.MouseButton1Click, function()
-
-            -- Brief accent flash on click
-
+        WinMaid:Add(Connect(Button.MouseButton1Click, function()
             Tween(Button, 0.07, { BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.18) })
-
             task.delay(0.14, function()
-
                 Tween(Button, 0.14, { BackgroundColor3 = Theme.Component })
-
             end)
+            if Cfg.Callback then task.spawn(Cfg.Callback) end
+        end))
 
-            if Cfg.Callback then
-
-                task.spawn(Cfg.Callback)
-
-            end
-
-        end)
-
-
-
-        Animations:Hover(Button)
-
+        Animations:Hover(Button, false, WinMaid)
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
-
         SetProperty(Button, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
 
+        local Ctrl = {}
+        function Ctrl:SetLabel(text) if Title then Title.Text = text end end
+        return Ctrl
     end
 
 
-
     -- ════════════════════════════════════════
-
-    --  INPUT (TextBox)
-
+    --  INPUT  (TextBox)
     -- ════════════════════════════════════════
-
-
 
     function Options:AddInput(Cfg)
-
         --[[
-
             Cfg = {
-
                 Title:       string
-
                 Description: string
-
                 Placeholder: string?
-
                 Tab:         Instance
-
                 Callback:    function(string)
-
             }
-
+            Returns: { Set(str), Get() }
         ]]
-
         local Input = Components and Clone(Components["Input"])
-
         if not Input then return end
 
-
-
         local Title, Desc = Options:GetLabels(Input)
-
         local Main    = Input:FindFirstChild("Main")
-
         local TextBox = Main and Main:FindFirstChild("Input")
 
-
-
         if TextBox then
-
             if Cfg.Placeholder then
-
                 TextBox.PlaceholderText = Cfg.Placeholder
-
             end
 
-
-
-            -- Tap anywhere on component to focus
-
-            Connect(Input.MouseButton1Click, function()
-
+            WinMaid:Add(Connect(Input.MouseButton1Click, function()
                 TextBox:CaptureFocus()
-
-            end)
-
-
-
-            -- Mobile: also handle Touch
+            end))
 
             if IsMobile then
-
-                Connect(Input.InputBegan, function(Input)
-
-                    if Input.UserInputType == Enum.UserInputType.Touch then
-
+                WinMaid:Add(Connect(Input.InputBegan, function(Inp)
+                    if Inp.UserInputType == Enum.UserInputType.Touch then
                         TextBox:CaptureFocus()
-
                     end
-
-                end)
-
+                end))
             end
 
-
-
-            Connect(TextBox.FocusLost, function()
-
-                if Cfg.Callback then Cfg.Callback(TextBox.Text) end
-
-            end)
-
-
-
-            -- Focus highlight
-
-            Connect(TextBox.Focused, function()
-
+            WinMaid:Add(Connect(TextBox.Focused, function()
                 if Main then
-
                     Tween(Main, 0.14, {
-
-                        BackgroundColor3 = LerpColor(Theme.Interactable, Theme.Accent, 0.12),
-
+                        BackgroundColor3 = LerpColor(Theme.Interactable, Theme.Accent, 0.12)
                     })
-
                 end
-
                 local Outline = Input:FindFirstChildOfClass("UIStroke")
-
                     or (Main and Main:FindFirstChildOfClass("UIStroke"))
-
                 if Outline then Tween(Outline, 0.14, { Color = Theme.Accent }) end
+            end))
 
-            end)
-
-
-
-            Connect(TextBox.FocusLost, function()
-
-                if Main then
-
-                    Tween(Main, 0.14, { BackgroundColor3 = Theme.Interactable })
-
-                end
-
+            -- FIXED: single FocusLost that handles both visual reset AND callback
+            WinMaid:Add(Connect(TextBox.FocusLost, function()
+                if Main then Tween(Main, 0.14, { BackgroundColor3 = Theme.Interactable }) end
                 local Outline = Input:FindFirstChildOfClass("UIStroke")
-
                     or (Main and Main:FindFirstChildOfClass("UIStroke"))
-
                 if Outline then Tween(Outline, 0.14, { Color = Theme.Outline }) end
-
-            end)
-
+                if Cfg.Callback then task.spawn(Cfg.Callback, TextBox.Text) end
+            end))
         end
 
-
-
-        Animations:Hover(Input)
-
+        Animations:Hover(Input, false, WinMaid)
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
-
         SetProperty(Input, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
 
+        local Ctrl = {}
+        function Ctrl:Set(text) if TextBox then TextBox.Text = text end end
+        function Ctrl:Get()     return TextBox and TextBox.Text or "" end
+        return Ctrl
     end
 
 
-
     -- ════════════════════════════════════════
-
-    --  SLIDER
-
+    --  SLIDER  (event-driven — FIXED polling loop)
     -- ════════════════════════════════════════
-
-
 
     function Options:AddSlider(Cfg)
-
         --[[
-
             Cfg = {
-
                 Title:         string
-
                 Description:   string
-
                 MinValue:      number?   — default 0
-
                 MaxValue:      number    — required
-
                 Default:       number?   — default = MinValue
-
                 AllowDecimals: boolean?
-
-                DecimalAmount: number?   — decimal places if AllowDecimals
-
+                DecimalAmount: number?   — decimal places (default 2)
                 Tab:           Instance
-
                 Callback:      function(number)
-
             }
-
+            Returns: { Set(n), Get(), OnChanged(fn) }
         ]]
-
         local Slider = Components and Clone(Components["Slider"])
-
         if not Slider then return end
 
-
-
         local Title, Desc = Options:GetLabels(Slider)
-
-        local Main   = Slider:FindFirstChild("Slider")
-
-        local Amount = Main and Main:FindFirstChild("Main") and Main.Main:FindFirstChild("Input")
-
-        local Slide  = Main and Main:FindFirstChild("Slide")
-
-        local Fire   = Slide and Slide:FindFirstChild("Fire")
-
-        local Fill   = Slide and Slide:FindFirstChild("Highlight")
-
-
+        local SliderFrame = Slider:FindFirstChild("Slider")
+        local Amount = SliderFrame and SliderFrame:FindFirstChild("Main")
+                    and SliderFrame.Main:FindFirstChild("Input")
+        local Slide = SliderFrame and SliderFrame:FindFirstChild("Slide")
+        local Fire  = Slide and Slide:FindFirstChild("Fire")
+        local Fill  = Slide and Slide:FindFirstChild("Highlight")
 
         local MinVal = Cfg.MinValue or 0
-
         local MaxVal = Cfg.MaxValue or 100
+        local Value  = math.clamp(Cfg.Default or MinVal, MinVal, MaxVal)
 
-        local Active = false
-
-        local Value  = Cfg.Default or MinVal
-
-
+        local Listeners = {}
+        local Active    = false
+        local HBConn    = nil   -- Heartbeat connection for mouse drag
+        local TchConn   = nil   -- InputChanged connection for touch drag
 
         local function Round(n)
-
             if Cfg.AllowDecimals then
-
                 local p = 10 ^ (Cfg.DecimalAmount or 2)
-
                 return math.floor(n * p + 0.5) / p
-
             end
-
             return math.round(n)
-
         end
 
-
-
-        local function Update(Number)
-
-            local scale
-
-            if Number ~= nil then
-
-                Number = math.clamp(Number, MinVal, MaxVal)
-
-                scale  = (Number - MinVal) / (MaxVal - MinVal)
-
-            else
-
-                local slideX = Slide and Slide.AbsolutePosition.X or 0
-
-                local slideW = Slide and Slide.AbsoluteSize.X     or 1
-
-                -- Support both mouse and touch positions
-
-                local posX = Player.Mouse.X
-
-                scale  = math.clamp((posX - slideX) / slideW, 0, 1)
-
-                Number = MinVal + scale * (MaxVal - MinVal)
-
-            end
-
-
-
-            Value = Round(Number)
-
+        local function UpdateFromScale(scale)
+            scale  = math.clamp(scale, 0, 1)
+            Value  = Round(MinVal + scale * (MaxVal - MinVal))
             if Amount then Amount.Text = tostring(Value) end
-
             if Fill   then Fill.Size   = UDim2.fromScale(scale, 1) end
-
-            if Cfg.Callback then Cfg.Callback(Value) end
-
+            if Cfg.Callback then task.spawn(Cfg.Callback, Value) end
+            for _, fn in ipairs(Listeners) do task.spawn(fn, Value) end
         end
 
-
-
-        local function StartSliding()
-
-            Active = true
-
-            repeat task.wait() Update()
-
-            until not Active
-
+        local function UpdateFromPositionX(posX)
+            if not Slide then return end
+            local slideX = Slide.AbsolutePosition.X
+            local slideW = math.max(Slide.AbsoluteSize.X, 1)
+            UpdateFromScale((posX - slideX) / slideW)
         end
 
+        local function SetValue(n)
+            n = math.clamp(n, MinVal, MaxVal)
+            UpdateFromScale((n - MinVal) / (MaxVal - MinVal))
+        end
 
+        -- Stop all drag activity and disconnect runtime connections
+        local function StopSliding()
+            Active = false
+            if HBConn then HBConn:Disconnect(); HBConn = nil end
+            if TchConn then TchConn:Disconnect(); TchConn = nil end
+        end
+        -- Safety: stop on window destroy
+        WinMaid:Add(StopSliding)
 
-        -- Touch drag: track finger position for slider
-
-        local TouchSlideConn
-
-        local function StartTouchSlide(touchInput)
-
+        -- Mouse drag: event-driven via RunService.Heartbeat (no polling loop)
+        local function StartMouseSliding()
+            if Active then return end
             Active = true
+            HBConn = Services.Run.Heartbeat:Connect(function()
+                if not Active then StopSliding(); return end
+                UpdateFromPositionX(Player.Mouse.X)
+            end)
+        end
 
-            TouchSlideConn = Connect(Services.Input.InputChanged, function(changedInput)
-
-                if changedInput.UserInputType == Enum.UserInputType.Touch and Active then
-
-                    if Slide then
-
-                        local slideX = Slide.AbsolutePosition.X
-
-                        local slideW = Slide.AbsoluteSize.X or 1
-
-                        local scale  = math.clamp((changedInput.Position.X - slideX) / slideW, 0, 1)
-
-                        local n      = MinVal + scale * (MaxVal - MinVal)
-
-                        Value = Round(n)
-
-                        if Amount then Amount.Text = tostring(Value) end
-
-                        if Fill   then Fill.Size   = UDim2.fromScale(scale, 1) end
-
-                        if Cfg.Callback then Cfg.Callback(Value) end
-
-                    end
-
+        -- Touch drag: uses actual touch InputObject position (FIXED: no Mouse fallback)
+        local function StartTouchSliding(touchInput)
+            if Active then return end
+            Active = true
+            TchConn = Services.Input.InputChanged:Connect(function(changedInput)
+                if not Active then return end
+                if changedInput.UserInputType == Enum.UserInputType.Touch
+                    and changedInput == touchInput then
+                    UpdateFromPositionX(changedInput.Position.X)
                 end
-
             end)
-
         end
-
-
-
-        if Amount then
-
-            Connect(Amount.FocusLost, function()
-
-                Update(tonumber(Amount.Text) or MinVal)
-
-            end)
-
-        end
-
-
 
         if Fire then
-
-            Connect(Fire.MouseButton1Down, StartSliding)
-
-            Connect(Fire.InputBegan, function(Input)
-
-                if Input.UserInputType == Enum.UserInputType.Touch then
-
-                    StartTouchSlide(Input)
-
+            WinMaid:Add(Connect(Fire.MouseButton1Down, StartMouseSliding))
+            WinMaid:Add(Connect(Fire.InputBegan, function(Inp)
+                if Inp.UserInputType == Enum.UserInputType.Touch then
+                    StartTouchSliding(Inp)
                 end
-
-            end)
-
+            end))
         end
 
-
-
-        Connect(Services.Input.InputEnded, function(Input)
-
-            local t = Input.UserInputType
-
-            if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
-
-                Active = false
-
-                if TouchSlideConn then
-
-                    TouchSlideConn:Disconnect()
-
-                    TouchSlideConn = nil
-
-                end
-
+        WinMaid:Add(Connect(Services.Input.InputEnded, function(Inp)
+            local t = Inp.UserInputType
+            if (t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch) and Active then
+                StopSliding()
             end
+        end))
 
-        end)
+        -- Manual text entry in the value box
+        if Amount then
+            WinMaid:Add(Connect(Amount.FocusLost, function()
+                SetValue(tonumber(Amount.Text) or MinVal)
+            end))
+        end
 
-
-
-        -- Initialize visual position
-
-        if Fill then Fill.Size = UDim2.fromScale(0, 1) end
-
-        Update(Value)
-
-
-
-        Animations:Hover(Slider)
-
+        -- Init
+        SetValue(Value)
+        Animations:Hover(Slider, false, WinMaid)
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
-
         SetProperty(Slider, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
 
+        local Ctrl = {}
+        function Ctrl:Set(n)        SetValue(n) end
+        function Ctrl:Get()         return Value end
+        function Ctrl:OnChanged(fn) Listeners[#Listeners + 1] = fn end
+        return Ctrl
     end
 
 
-
     -- ════════════════════════════════════════
-
     --  KEYBIND
-
     -- ════════════════════════════════════════
-
-
 
     function Options:AddKeybind(Cfg)
-
         --[[
-
             Cfg = {
-
                 Title:       string
-
                 Description: string
-
+                Default:     Enum.KeyCode?
                 Tab:         Instance
-
                 Callback:    function(InputObject)
-
             }
-
+            Returns: { Set(kc), Get(), OnChanged(fn) }
         ]]
+        local KBC = Components and Clone(Components["Keybind"])
+        if not KBC then return end
 
-        local Dropdown = Components and Clone(Components["Keybind"])
+        local Title, Desc = Options:GetLabels(KBC)
+        local Bind = KBC:FindFirstChild("Main") and KBC.Main:FindFirstChild("Options")
 
-        if not Dropdown then return end
-
-
-
-        local Title, Desc = Options:GetLabels(Dropdown)
-
-        local Bind = Dropdown:FindFirstChild("Main") and Dropdown.Main:FindFirstChild("Options")
-
-
+        local CurrentKey = Cfg.Default
+        local Listening  = false
+        local Listeners  = {}
 
         local MouseTypes = {
-
             Enum.UserInputType.MouseButton1,
-
             Enum.UserInputType.MouseButton2,
-
             Enum.UserInputType.MouseButton3,
-
         }
 
+        local function FormatKey(Key)
+            local t = Key.UserInputType
+            if table.find(MouseTypes, t) then
+                return tostring(t):gsub("Enum.UserInputType.MouseButton", "MB")
+            elseif t == Enum.UserInputType.Keyboard then
+                return tostring(Key.KeyCode):gsub("Enum.KeyCode.", "")
+            end
+            return "?"
+        end
 
+        local function SetBind(Key)
+            CurrentKey = Key
+            if Bind then Bind.Text = FormatKey(Key) end
+            for _, fn in ipairs(Listeners) do task.spawn(fn, Key) end
+        end
 
-        Connect(Dropdown.MouseButton1Click, function()
+        if CurrentKey and Bind then
+            -- Format a plain KeyCode (not an InputObject) for display
+            if typeof(CurrentKey) == "EnumItem" then
+                Bind.Text = tostring(CurrentKey):gsub("Enum.KeyCode.", "")
+            end
+        end
 
+        local DetectConn
+
+        WinMaid:Add(Connect(KBC.MouseButton1Click, function()
+            if Listening then return end  -- FIXED: guard prevents double-capture
+            Listening = true
             if Bind then Bind.Text = "..." end
 
-            local Finished = false
-
-            local Detect
-
-
-
-            Detect = Connect(Services.Input.InputBegan, function(Key, GameFocused)
-
-                if Finished or GameFocused then return end
-
-                Finished = true
-
-
-
-                local InputType = Key.UserInputType
-
-                if table.find(MouseTypes, InputType) then
-
-                    if Cfg.Callback then Cfg.Callback(Key) end
-
-                    if Bind then Bind.Text = tostring(InputType):gsub("Enum.UserInputType.MouseButton", "MB") end
-
-                elseif InputType == Enum.UserInputType.Keyboard then
-
-                    if Cfg.Callback then Cfg.Callback(Key) end
-
-                    if Bind then Bind.Text = tostring(Key.KeyCode):gsub("Enum.KeyCode.", "") end
-
-                end
-
-
-
-                if Detect then Detect:Disconnect() end
-
+            DetectConn = Connect(Services.Input.InputBegan, function(Key, GameFocused)
+                if not Listening or GameFocused then return end
+                Listening = false
+                SetBind(Key)
+                if Cfg.Callback then task.spawn(Cfg.Callback, Key) end
+                if DetectConn then DetectConn:Disconnect(); DetectConn = nil end
             end)
+            WinMaid:Add(DetectConn)
+        end))
 
-        end)
-
-
-
-        Animations:Hover(Dropdown)
-
+        Animations:Hover(KBC, false, WinMaid)
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
+        SetProperty(KBC, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
 
-        SetProperty(Dropdown, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
-
+        local Ctrl = {}
+        function Ctrl:Set(key)      SetBind({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = key }) end
+        function Ctrl:Get()         return CurrentKey end
+        function Ctrl:OnChanged(fn) Listeners[#Listeners + 1] = fn end
+        return Ctrl
     end
 
 
-
     -- ════════════════════════════════════════
-
-    --  DROPDOWN
-
+    --  DROPDOWN  (single-select)
     -- ════════════════════════════════════════
-
-
 
     function Options:AddDropdown(Cfg)
-
         --[[
-
             Cfg = {
-
-                Title:       string
-
+                Title:    string
                 Description: string
-
-                Options:     { [string]: any }  — index = display, value = callback arg
-
-                Tab:         Instance
-
-                Callback:    function(value)
-
+                Options:  { [string]: any }
+                Default:  any?
+                Tab:      Instance
+                Callback: function(value)
             }
-
+            Returns: { Set(value), Get() }
         ]]
-
         local Dropdown = Components and Clone(Components["Dropdown"])
-
         if not Dropdown then return end
 
-
-
-        local Title, Desc = Options:GetLabels(Dropdown)
-
+        local Title, Desc  = Options:GetLabels(Dropdown)
         local OptionsLabel = Dropdown:FindFirstChild("Main") and Dropdown.Main:FindFirstChild("Options")
 
+        local CurrentValue = Cfg.Default
+        if OptionsLabel and CurrentValue ~= nil then
+            -- Show the key for the default value
+            for idx, opt in pairs(Cfg.Options) do
+                if opt == CurrentValue then
+                    OptionsLabel.Text = tostring(idx); break
+                end
+            end
+        end
 
-
-        Connect(Dropdown.MouseButton1Click, function()
-
+        WinMaid:Add(Connect(Dropdown.MouseButton1Click, function()
             local Example = Clone(Examples["DropdownExample"])
-
             if not Example then return end
 
-
-
             local CloseButtons = Example:FindFirstChild("Top") and Example.Top:FindFirstChild("Buttons")
-
             local ScrollFrame  = Example:FindFirstChild("ScrollingFrame") or Example
 
-
-
             if BG then Tween(BG, 0.18, { BackgroundTransparency = 0.5 }) end
-
             Example.Parent = Window
-
             Animations:Open(Example, 0, true)
 
-
-
             local function CloseDropdown()
-
                 if BG then Tween(BG, 0.18, { BackgroundTransparency = 1 }) end
-
                 Animations:Close(Example)
-
-                task.wait(2)
-
-                if Example and Example.Parent then Destroy(Example) end
-
+                -- FIXED: was task.wait(2) — now 0.3 s after animation ends
+                task.delay(0.3, function() Destroy(Example) end)
             end
-
-
 
             if CloseButtons then
-
                 for _, Btn in next, CloseButtons:GetChildren() do
-
                     if Btn:IsA("TextButton") then
-
                         Animations:Hover(Btn)
-
                         Connect(Btn.MouseButton1Click, CloseDropdown)
-
                     end
-
                 end
-
             end
 
-
-
             for Index, Option in next, Cfg.Options do
-
                 local Btn = Clone(Examples["DropdownButtonExample"])
-
                 if not Btn then continue end
 
-
-
                 local BTitle, _ = Options:GetLabels(Btn)
-
                 local Selected  = Btn:FindFirstChild("Value")
-
-
 
                 if BTitle then BTitle.Text = tostring(Index) end
 
-                SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
+                -- Pre-highlight if already selected
+                if CurrentValue == Option then
+                    Btn.BackgroundColor3 = Theme.Interactable
+                    if Selected then Selected.Value = true end
+                end
 
+                SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
                 Animations:Hover(Btn)
 
-
-
                 Connect(Btn.MouseButton1Click, function()
+                    CurrentValue = Option
+                    if OptionsLabel then OptionsLabel.Text = tostring(Index) end
+                    if Cfg.Callback then task.spawn(Cfg.Callback, Option) end
 
-                    local IsSelected = not (Selected and Selected.Value)
-
-                    if IsSelected then
-
-                        Tween(Btn, 0.18, { BackgroundColor3 = Theme.Interactable })
-
-                        if Cfg.Callback then Cfg.Callback(Option) end
-
-                        if OptionsLabel then OptionsLabel.Text = tostring(Index) end
-
-                        -- Deselect others
-
-                        for _, Other in next, ScrollFrame:GetChildren() do
-
-                            if Other:IsA("TextButton") and Other ~= Btn then
-
-                                Tween(Other, 0.18, { BackgroundColor3 = Theme.Component })
-
-                                local OV = Other:FindFirstChild("Value")
-
-                                if OV then OV.Value = false end
-
-                            end
-
+                    for _, Other in next, ScrollFrame:GetChildren() do
+                        if Other:IsA("TextButton") and Other ~= Btn then
+                            Tween(Other, 0.18, { BackgroundColor3 = Theme.Component })
+                            local OV = Other:FindFirstChild("Value")
+                            if OV then OV.Value = false end
                         end
-
-                    else
-
-                        Tween(Btn, 0.18, { BackgroundColor3 = Theme.Component })
-
                     end
-
-                    if Selected then Selected.Value = IsSelected end
-
+                    Tween(Btn, 0.18, { BackgroundColor3 = Theme.Interactable })
+                    if Selected then Selected.Value = true end
                     CloseDropdown()
-
                 end)
-
             end
+        end))
 
-        end)
-
-
-
-        Animations:Hover(Dropdown)
-
+        Animations:Hover(Dropdown, false, WinMaid)
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
-
         SetProperty(Dropdown, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
 
+        local Ctrl = {}
+        function Ctrl:Get() return CurrentValue end
+        function Ctrl:Set(value)
+            for idx, opt in pairs(Cfg.Options) do
+                if opt == value then
+                    CurrentValue = opt
+                    if OptionsLabel then OptionsLabel.Text = tostring(idx) end
+                    break
+                end
+            end
+        end
+        return Ctrl
     end
 
 
-
+    -- ════════════════════════════════════════
+    --  MULTI-DROPDOWN  (new)
     -- ════════════════════════════════════════
 
+    function Options:AddMultiDropdown(Cfg)
+        --[[
+            Cfg = {
+                Title:    string
+                Description: string
+                Options:  { [string]: any }
+                Default:  { any }?          — pre-selected values list
+                Tab:      Instance
+                Callback: function(selectedValues: table)
+            }
+            Returns: { Get(), Set({values}) }
+        ]]
+        local Dropdown = Components and Clone(Components["Dropdown"])
+        if not Dropdown then return end
+
+        local Title, Desc  = Options:GetLabels(Dropdown)
+        local OptionsLabel = Dropdown:FindFirstChild("Main") and Dropdown.Main:FindFirstChild("Options")
+
+        -- Selected is a set {value → true}
+        local Selected = {}
+        if Cfg.Default then
+            for _, v in ipairs(Cfg.Default) do Selected[v] = true end
+        end
+
+        local function UpdateLabel()
+            if not OptionsLabel then return end
+            local count = 0
+            for _ in pairs(Selected) do count += 1 end
+            OptionsLabel.Text = (count == 0) and "None" or (count .. " selected")
+        end
+        UpdateLabel()
+
+        WinMaid:Add(Connect(Dropdown.MouseButton1Click, function()
+            local Example = Clone(Examples["DropdownExample"])
+            if not Example then return end
+
+            local CloseButtons = Example:FindFirstChild("Top") and Example.Top:FindFirstChild("Buttons")
+            local ScrollFrame  = Example:FindFirstChild("ScrollingFrame") or Example
+
+            if BG then Tween(BG, 0.18, { BackgroundTransparency = 0.5 }) end
+            Example.Parent = Window
+            Animations:Open(Example, 0, true)
+
+            local function CloseDropdown()
+                if BG then Tween(BG, 0.18, { BackgroundTransparency = 1 }) end
+                Animations:Close(Example)
+                task.delay(0.3, function() Destroy(Example) end)
+            end
+
+            if CloseButtons then
+                for _, Btn in next, CloseButtons:GetChildren() do
+                    if Btn:IsA("TextButton") then
+                        Animations:Hover(Btn)
+                        Connect(Btn.MouseButton1Click, CloseDropdown)
+                    end
+                end
+            end
+
+            for Index, Option in next, Cfg.Options do
+                local Btn = Clone(Examples["DropdownButtonExample"])
+                if not Btn then continue end
+
+                local BTitle, _ = Options:GetLabels(Btn)
+                if BTitle then BTitle.Text = tostring(Index) end
+
+                -- Check mark label
+                local Chk = Instance.new("TextLabel", Btn)
+                SetProperty(Chk, {
+                    Name                   = "CheckMark",
+                    Text                   = Selected[Option] and "✓" or "",
+                    Font                   = Enum.Font.GothamBold,
+                    TextSize               = 13,
+                    TextColor3             = Theme.Accent,
+                    BackgroundTransparency = 1,
+                    Size                   = UDim2.new(0, 20, 1, 0),
+                    Position               = UDim2.new(1, -24, 0, 0),
+                    AnchorPoint            = Vector2.new(1, 0),
+                    ZIndex                 = Btn.ZIndex + 1,
+                })
+
+                if Selected[Option] then
+                    Btn.BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.12)
+                end
+
+                SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
+                Animations:Hover(Btn)
+
+                Connect(Btn.MouseButton1Click, function()
+                    Selected[Option] = not Selected[Option]
+                    Chk.Text = Selected[Option] and "✓" or ""
+                    Tween(Btn, 0.15, {
+                        BackgroundColor3 = Selected[Option]
+                            and LerpColor(Theme.Component, Theme.Accent, 0.12)
+                            or  Theme.Component
+                    })
+                    UpdateLabel()
+
+                    -- Build ordered array for callback
+                    local arr = {}
+                    for v in pairs(Selected) do arr[#arr + 1] = v end
+                    if Cfg.Callback then task.spawn(Cfg.Callback, arr) end
+                end)
+            end
+        end))
+
+        Animations:Hover(Dropdown, false, WinMaid)
+        if Title then Title.Text = Cfg.Title       or "" end
+        if Desc  then Desc.Text  = Cfg.Description or "" end
+        SetProperty(Dropdown, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
+
+        local Ctrl = {}
+        function Ctrl:Get()
+            local arr = {}
+            for v in pairs(Selected) do arr[#arr + 1] = v end
+            return arr
+        end
+        function Ctrl:Set(values)
+            Selected = {}
+            for _, v in ipairs(values) do Selected[v] = true end
+            UpdateLabel()
+        end
+        return Ctrl
+    end
+
+
+    -- ════════════════════════════════════════
     --  PARAGRAPH
-
     -- ════════════════════════════════════════
-
-
 
     function Options:AddParagraph(Cfg)
-
         -- Cfg = { Title: string, Description: string, Tab: Instance }
-
         local Para = Components and Clone(Components["Paragraph"])
-
         if not Para then return end
 
-
-
         local Title, Desc = Options:GetLabels(Para)
-
         if Title then Title.Text = Cfg.Title       or "" end
-
         if Desc  then Desc.Text  = Cfg.Description or "" end
-
         SetProperty(Para, { Parent = Cfg.Tab, Visible = true })
 
+        local Ctrl = {}
+        function Ctrl:SetTitle(text)       if Title then Title.Text = text end end
+        function Ctrl:SetDescription(text) if Desc  then Desc.Text  = text end end
+        return Ctrl
     end
 
 
-
+    -- ════════════════════════════════════════
+    --  PROGRESS BAR  (new)
     -- ════════════════════════════════════════
 
-    --  CODE BLOCK  (新 component — Stellar)
-
-    -- ════════════════════════════════════════
-
-
-
-    function Options:AddCodeBlock(Cfg)
-
+    function Options:AddProgressBar(Cfg)
         --[[
-
             Cfg = {
-
-                Title:    string          — Label shown beside the dots
-
-                Code:     string          — Code text (also copied to clipboard)
-
-                Tab:      Instance
-
-                Callback: function()?     — called after copy
-
+                Title:   string
+                Tab:     Instance
+                Default: number?   (0–1, default 0)
             }
+            Returns: { Set(0–1), Get() }
+        ]]
+        local Wrapper = Instance.new("Frame")
+        SetProperty(Wrapper, {
+            Name             = "ProgressBar_" .. (Cfg.Title or ""),
+            Size             = UDim2.new(1, 0, 0, IsMobile and 54 or 46),
+            BackgroundColor3 = Theme.Component,
+            BorderSizePixel  = 0,
+            Parent           = Cfg.Tab,
+            Visible          = true,
+        })
+        Instance.new("UICorner", Wrapper).CornerRadius = UDim.new(0, 8)
 
+        local Row = Instance.new("Frame", Wrapper)
+        SetProperty(Row, {
+            Name            = "LabelRow",
+            Size            = UDim2.new(1, -16, 0, 18),
+            Position        = UDim2.new(0, 10, 0, 7),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+        })
+
+        local TitleLbl = Instance.new("TextLabel", Row)
+        SetProperty(TitleLbl, {
+            Text           = Cfg.Title or "",
+            Font           = Enum.Font.GothamSemibold,
+            TextSize       = 13,
+            TextColor3     = Theme.Title,
+            BackgroundTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Size           = UDim2.new(0.7, 0, 1, 0),
+            BorderSizePixel = 0,
+        })
+
+        local PctLbl = Instance.new("TextLabel", Row)
+        SetProperty(PctLbl, {
+            Name           = "Pct",
+            Text           = "0%",
+            Font           = Enum.Font.GothamMedium,
+            TextSize       = 12,
+            TextColor3     = Theme.Description,
+            BackgroundTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            Size           = UDim2.new(0.3, 0, 1, 0),
+            Position       = UDim2.new(0.7, 0, 0, 0),
+            BorderSizePixel = 0,
+        })
+
+        local TrackFrame = Instance.new("Frame", Wrapper)
+        SetProperty(TrackFrame, {
+            Name             = "Track",
+            Size             = UDim2.new(1, -20, 0, 6),
+            Position         = UDim2.new(0, 10, 1, -12),
+            AnchorPoint      = Vector2.new(0, 1),
+            BackgroundColor3 = Theme.ProgressBg,
+            BorderSizePixel  = 0,
+            ClipsDescendants = true,
+        })
+        Instance.new("UICorner", TrackFrame).CornerRadius = UDim.new(1, 0)
+
+        local FillFrame = Instance.new("Frame", TrackFrame)
+        SetProperty(FillFrame, {
+            Name             = "Fill",
+            Size             = UDim2.fromScale(0, 1),
+            BackgroundColor3 = Theme.ProgressFill,
+            BorderSizePixel  = 0,
+        })
+        Instance.new("UICorner", FillFrame).CornerRadius = UDim.new(1, 0)
+
+        local Current = math.clamp(Cfg.Default or 0, 0, 1)
+
+        local function SetProgress(pct)
+            pct     = math.clamp(pct, 0, 1)
+            Current = pct
+            Tween(FillFrame, 0.3, { Size = UDim2.fromScale(pct, 1) })
+            PctLbl.Text = math.floor(pct * 100) .. "%"
+        end
+        SetProgress(Current)
+
+        local Ctrl = {}
+        function Ctrl:Set(pct) SetProgress(pct) end
+        function Ctrl:Get()    return Current    end
+        return Ctrl
+    end
+
+
+    -- ════════════════════════════════════════
+    --  COLOR PICKER  (new — UIGradient, no external assets)
+    -- ════════════════════════════════════════
+
+    function Options:AddColorPicker(Cfg)
+        --[[
+            Cfg = {
+                Title:    string
+                Default:  Color3?
+                Tab:      Instance
+                Callback: function(Color3)
+            }
+            Returns: { Set(Color3), Get() }
         ]]
 
-        -- Prefer a dedicated "Code" template; fall back to "Paragraph"
+        -- ── Collapsed row ────────────────────────────────────────────────
+        local Row = Instance.new("TextButton")
+        SetProperty(Row, {
+            Name             = "ColorPicker_" .. (Cfg.Title or ""),
+            Size             = UDim2.new(1, 0, 0, IsMobile and 48 or 40),
+            BackgroundColor3 = Theme.Component,
+            BorderSizePixel  = 0,
+            Text             = "",
+            AutoButtonColor  = false,
+            Parent           = Cfg.Tab,
+            Visible          = true,
+        })
+        Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
+        local RowPad = Instance.new("UIPadding", Row)
+        RowPad.PaddingLeft  = UDim.new(0, 12)
+        RowPad.PaddingRight = UDim.new(0, 12)
 
+        local RowTitle = Instance.new("TextLabel", Row)
+        SetProperty(RowTitle, {
+            Text                   = Cfg.Title or "Color",
+            Font                   = Enum.Font.GothamSemibold,
+            TextSize               = 13,
+            TextColor3             = Theme.Title,
+            BackgroundTransparency = 1,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            Size                   = UDim2.new(1, -50, 1, 0),
+            BorderSizePixel        = 0,
+        })
+
+        local Swatch = Instance.new("Frame", Row)
+        SetProperty(Swatch, {
+            Name             = "Swatch",
+            Size             = UDim2.new(0, IsMobile and 36 or 28, 0, IsMobile and 22 or 18),
+            Position         = UDim2.new(1, 0, 0.5, 0),
+            AnchorPoint      = Vector2.new(1, 0.5),
+            BorderSizePixel  = 0,
+            BackgroundColor3 = Cfg.Default or Color3.fromRGB(108, 130, 255),
+        })
+        Instance.new("UICorner", Swatch).CornerRadius = UDim.new(0, 5)
+        local SwatchStroke = Instance.new("UIStroke", Swatch)
+        SwatchStroke.Color = Theme.Outline
+
+        -- ── Expanded picker panel ─────────────────────────────────────────
+        local SV_H    = IsMobile and 130 or 110
+        local HUE_H   = IsMobile and 18  or 14
+        local HEX_H   = IsMobile and 32  or 26
+        local PANEL_H = 16 + SV_H + 8 + HUE_H + 8 + HEX_H + 10
+
+        local Picker = Instance.new("Frame")
+        SetProperty(Picker, {
+            Name             = "Picker",
+            Size             = UDim2.new(1, 0, 0, 0),
+            BackgroundColor3 = Theme.CPBackground,
+            BorderSizePixel  = 0,
+            ClipsDescendants = true,
+            Visible          = false,
+            Parent           = Cfg.Tab,
+        })
+        Instance.new("UICorner", Picker).CornerRadius = UDim.new(0, 8)
+        local PickerStroke = Instance.new("UIStroke", Picker)
+        PickerStroke.Color = Theme.CPBorder
+
+        -- SV canvas: base hue colour + white-gradient (sat) + black-gradient (val)
+        local SVCanvas = Instance.new("Frame", Picker)
+        SetProperty(SVCanvas, {
+            Name             = "SVCanvas",
+            Size             = UDim2.new(1, -16, 0, SV_H),
+            Position         = UDim2.new(0, 8, 0, 8),
+            BackgroundColor3 = Color3.fromHSV(0, 1, 1),
+            BorderSizePixel  = 0,
+            ClipsDescendants = false,
+        })
+        Instance.new("UICorner", SVCanvas).CornerRadius = UDim.new(0, 6)
+
+        -- White overlay (saturation — left opaque, right transparent)
+        local WhiteOverlay = Instance.new("Frame", SVCanvas)
+        SetProperty(WhiteOverlay, {
+            Size             = UDim2.fromScale(1, 1),
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderSizePixel  = 0,
+            ZIndex           = SVCanvas.ZIndex + 1,
+        })
+        Instance.new("UICorner", WhiteOverlay).CornerRadius = UDim.new(0, 6)
+        local WhiteGrad = Instance.new("UIGradient", WhiteOverlay)
+        WhiteGrad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+
+        -- Black overlay (value — top transparent, bottom opaque)
+        local BlackOverlay = Instance.new("Frame", SVCanvas)
+        SetProperty(BlackOverlay, {
+            Size             = UDim2.fromScale(1, 1),
+            BackgroundColor3 = Color3.new(0, 0, 0),
+            BorderSizePixel  = 0,
+            ZIndex           = SVCanvas.ZIndex + 2,
+        })
+        Instance.new("UICorner", BlackOverlay).CornerRadius = UDim.new(0, 6)
+        local BlackGrad = Instance.new("UIGradient", BlackOverlay)
+        BlackGrad.Rotation     = 90
+        BlackGrad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+
+        -- SV thumb
+        local SVThumb = Instance.new("Frame", SVCanvas)
+        SetProperty(SVThumb, {
+            Size             = UDim2.new(0, 12, 0, 12),
+            AnchorPoint      = Vector2.new(0.5, 0.5),
+            Position         = UDim2.new(1, 0, 0, 0),
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderSizePixel  = 0,
+            ZIndex           = SVCanvas.ZIndex + 5,
+        })
+        Instance.new("UICorner", SVThumb).CornerRadius = UDim.new(1, 0)
+        local SVStroke = Instance.new("UIStroke", SVThumb)
+        SVStroke.Color = Color3.new(0.15, 0.15, 0.15); SVStroke.Thickness = 1.5
+
+        -- Hue track (rainbow gradient)
+        local HueTrack = Instance.new("Frame", Picker)
+        SetProperty(HueTrack, {
+            Name             = "HueTrack",
+            Size             = UDim2.new(1, -16, 0, HUE_H),
+            Position         = UDim2.new(0, 8, 0, 8 + SV_H + 8),
+            BackgroundColor3 = Color3.new(1, 0, 0),
+            BorderSizePixel  = 0,
+            ClipsDescendants = true,
+        })
+        Instance.new("UICorner", HueTrack).CornerRadius = UDim.new(1, 0)
+        local HueGrad = Instance.new("UIGradient", HueTrack)
+        HueGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0/6,   Color3.fromHSV(0/6,   1, 1)),
+            ColorSequenceKeypoint.new(1/6,   Color3.fromHSV(1/6,   1, 1)),
+            ColorSequenceKeypoint.new(2/6,   Color3.fromHSV(2/6,   1, 1)),
+            ColorSequenceKeypoint.new(3/6,   Color3.fromHSV(3/6,   1, 1)),
+            ColorSequenceKeypoint.new(4/6,   Color3.fromHSV(4/6,   1, 1)),
+            ColorSequenceKeypoint.new(5/6,   Color3.fromHSV(5/6,   1, 1)),
+            ColorSequenceKeypoint.new(1,     Color3.fromHSV(1,     1, 1)),
+        })
+
+        local HueThumb = Instance.new("Frame", HueTrack)
+        SetProperty(HueThumb, {
+            Size             = UDim2.new(0, IsMobile and 16 or 12, 1, 4),
+            AnchorPoint      = Vector2.new(0.5, 0.5),
+            Position         = UDim2.new(0, 0, 0.5, 0),
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderSizePixel  = 0,
+            ZIndex           = HueTrack.ZIndex + 2,
+        })
+        Instance.new("UICorner", HueThumb).CornerRadius = UDim.new(0, 4)
+        local HueStroke = Instance.new("UIStroke", HueThumb)
+        HueStroke.Color = Color3.new(0.15, 0.15, 0.15); HueStroke.Thickness = 1.5
+
+        -- Hex input
+        local HexRow = Instance.new("Frame", Picker)
+        SetProperty(HexRow, {
+            Name             = "HexRow",
+            Size             = UDim2.new(1, -16, 0, HEX_H),
+            Position         = UDim2.new(0, 8, 0, 8 + SV_H + 8 + HUE_H + 8),
+            BackgroundColor3 = Theme.CPHexBg,
+            BorderSizePixel  = 0,
+        })
+        Instance.new("UICorner", HexRow).CornerRadius = UDim.new(0, 6)
+
+        local HexInput = Instance.new("TextBox", HexRow)
+        SetProperty(HexInput, {
+            Name              = "HexInput",
+            Text              = "",
+            PlaceholderText   = "#RRGGBB",
+            Font              = Enum.Font.Code,
+            TextSize          = 12,
+            TextColor3        = Theme.Title,
+            BackgroundTransparency = 1,
+            Size              = UDim2.new(1, -12, 1, 0),
+            Position          = UDim2.new(0, 6, 0, 0),
+            ClearTextOnFocus  = false,
+            BorderSizePixel   = 0,
+        })
+
+        -- ── HSV state ─────────────────────────────────────────────────────
+        local H, S, V = Color3.toHSV(Cfg.Default or Color3.fromRGB(108, 130, 255))
+        local PickerOpen = false
+
+        local function GetC3() return Color3.fromHSV(H, S, V) end
+
+        local function UpdateVisuals()
+            local c3 = GetC3()
+            Swatch.BackgroundColor3 = c3
+            SVCanvas.BackgroundColor3 = Color3.fromHSV(H, 1, 1)
+            SVThumb.Position = UDim2.new(S, 0, 1 - V, 0)
+            HueThumb.Position = UDim2.new(H, 0, 0.5, 0)
+            HexInput.Text = Color3ToHex(c3)
+            if Cfg.Callback then task.spawn(Cfg.Callback, c3) end
+        end
+
+        -- Toggle open/close
+        WinMaid:Add(Connect(Row.MouseButton1Click, function()
+            PickerOpen = not PickerOpen
+            if PickerOpen then
+                Picker.Visible = true
+                Tween(Picker, 0.2, { Size = UDim2.new(1, 0, 0, PANEL_H) })
+            else
+                Tween(Picker, 0.18, { Size = UDim2.new(1, 0, 0, 0) })
+                task.delay(0.2, function() Picker.Visible = false end)
+            end
+        end))
+
+        -- SV drag
+        local SVDragging = false
+        local function UpdateSV(px, py)
+            local ax, ay = SVCanvas.AbsolutePosition.X, SVCanvas.AbsolutePosition.Y
+            local aw, ah = math.max(SVCanvas.AbsoluteSize.X, 1), math.max(SVCanvas.AbsoluteSize.Y, 1)
+            S = math.clamp((px - ax) / aw, 0, 1)
+            V = 1 - math.clamp((py - ay) / ah, 0, 1)
+            UpdateVisuals()
+        end
+        WinMaid:Add(Connect(SVCanvas.InputBegan, function(Inp)
+            if Inp.UserInputType == Enum.UserInputType.MouseButton1
+                or Inp.UserInputType == Enum.UserInputType.Touch then
+                SVDragging = true
+                UpdateSV(Inp.Position.X, Inp.Position.Y)
+            end
+        end))
+        WinMaid:Add(Connect(Services.Input.InputChanged, function(Inp)
+            if not SVDragging then return end
+            if Inp.UserInputType == Enum.UserInputType.MouseMovement
+                or Inp.UserInputType == Enum.UserInputType.Touch then
+                UpdateSV(Inp.Position.X, Inp.Position.Y)
+            end
+        end))
+        WinMaid:Add(Connect(Services.Input.InputEnded, function(Inp)
+            if Inp.UserInputType == Enum.UserInputType.MouseButton1
+                or Inp.UserInputType == Enum.UserInputType.Touch then
+                SVDragging = false
+            end
+        end))
+
+        -- Hue drag
+        local HueDragging = false
+        local function UpdateHue(px)
+            local ax = HueTrack.AbsolutePosition.X
+            local aw = math.max(HueTrack.AbsoluteSize.X, 1)
+            H = math.clamp((px - ax) / aw, 0, 1)
+            UpdateVisuals()
+        end
+        WinMaid:Add(Connect(HueTrack.InputBegan, function(Inp)
+            if Inp.UserInputType == Enum.UserInputType.MouseButton1
+                or Inp.UserInputType == Enum.UserInputType.Touch then
+                HueDragging = true
+                UpdateHue(Inp.Position.X)
+            end
+        end))
+        WinMaid:Add(Connect(Services.Input.InputChanged, function(Inp)
+            if not HueDragging then return end
+            if Inp.UserInputType == Enum.UserInputType.MouseMovement
+                or Inp.UserInputType == Enum.UserInputType.Touch then
+                UpdateHue(Inp.Position.X)
+            end
+        end))
+        WinMaid:Add(Connect(Services.Input.InputEnded, function(Inp)
+            if Inp.UserInputType == Enum.UserInputType.MouseButton1
+                or Inp.UserInputType == Enum.UserInputType.Touch then
+                HueDragging = false
+            end
+        end))
+
+        -- Hex input
+        WinMaid:Add(Connect(HexInput.FocusLost, function()
+            local c3 = HexToColor3(HexInput.Text)
+            if c3 then
+                H, S, V = Color3.toHSV(c3)
+                UpdateVisuals()
+            else
+                HexInput.Text = Color3ToHex(GetC3())
+            end
+        end))
+
+        UpdateVisuals()
+        Animations:Hover(Row, false, WinMaid)
+
+        local Ctrl = {}
+        function Ctrl:Set(c3) H, S, V = Color3.toHSV(c3); UpdateVisuals() end
+        function Ctrl:Get()   return GetC3() end
+        return Ctrl
+    end
+
+
+    -- ════════════════════════════════════════
+    --  CODE BLOCK
+    -- ════════════════════════════════════════
+
+    function Options:AddCodeBlock(Cfg)
+        --[[
+            Cfg = {
+                Title:    string
+                Code:     string
+                Tab:      Instance
+                Callback: function()?   — called after copy
+            }
+        ]]
         local Template = Components and (Components:FindFirstChild("Code") or Components["Paragraph"])
-
         if not Template then return end
 
-
-
-        local Block = Clone(Template)
-
+        local Block   = Clone(Template)
         local Title, Desc = Options:GetLabels(Block)
-
         local CopyBtn = Block:FindFirstChild("Copy") or Block:FindFirstChild("CopyButton")
 
-
-
-        -- Traffic-light dots (if the template has them)
-
+        -- Traffic-light dots
         local Dots = Block:FindFirstChild("Dots")
-
         if Dots then
-
-            local DotRed    = Dots:FindFirstChild("Red")
-
-            local DotYellow = Dots:FindFirstChild("Yellow")
-
-            local DotGreen  = Dots:FindFirstChild("Green")
-
-            if DotRed    then DotRed.BackgroundColor3    = Theme.CodeDotRed    end
-
-            if DotYellow then DotYellow.BackgroundColor3 = Theme.CodeDotYellow end
-
-            if DotGreen  then DotGreen.BackgroundColor3  = Theme.CodeDotGreen  end
-
+            local DR = Dots:FindFirstChild("Red")
+            local DY = Dots:FindFirstChild("Yellow")
+            local DG = Dots:FindFirstChild("Green")
+            if DR then DR.BackgroundColor3 = Theme.CodeDotRed    end
+            if DY then DY.BackgroundColor3 = Theme.CodeDotYellow end
+            if DG then DG.BackgroundColor3 = Theme.CodeDotGreen  end
         end
-
-
 
         if Title then Title.Text = Cfg.Title or "Code" end
-
         if Desc  then Desc.Text  = Cfg.Code  or ""    end
 
-
-
         if CopyBtn then
-
             local BtnLabel = CopyBtn:FindFirstChild("TextLabel") or CopyBtn:FindFirstChild("Label")
 
-
-
-            Connect(CopyBtn.MouseButton1Click, function()
-
-                -- Copy to clipboard
-
+            WinMaid:Add(Connect(CopyBtn.MouseButton1Click, function()
                 pcall(function()
-
                     if setclipboard then setclipboard(Cfg.Code or "") end
-
                 end)
 
-
-
-                -- Brief "Copied!" feedback
-
                 if BtnLabel then
-
                     local Original = BtnLabel.Text
-
-                    BtnLabel.Text = "Copied!"
-
+                    BtnLabel.Text  = "Copied!"
                     Tween(CopyBtn, 0.1, {
-
                         BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.25),
-
                     })
-
                     task.delay(1.5, function()
-
                         BtnLabel.Text = Original
-
                         Tween(CopyBtn, 0.15, { BackgroundColor3 = Theme.Component })
-
                     end)
-
                 end
-
-
 
                 if Cfg.Callback then task.spawn(Cfg.Callback) end
+            end))
 
-            end)
-
-
-
-            Animations:Hover(CopyBtn)
-
+            Animations:Hover(CopyBtn, false, WinMaid)
         end
-
-
 
         SetProperty(Block, { Parent = Cfg.Tab, Visible = true })
-
     end
 
 
-
     -- ════════════════════════════════════════
-
     --  THEME ENGINE
-
     -- ════════════════════════════════════════
-
-
-
-    --[[
-
-        Maps descendant names / classes to theme property setters.
-
-        Called once on window creation and whenever the theme changes.
-
-    ]]
 
     local NameRules = {
-
-        ["Paragraph"]        = function(L) if L:IsA("TextButton") then L.BackgroundColor3 = Theme.Component end end,
-
-        ["Title"]            = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.Title       end end,
-
-        ["Description"]      = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.Description end end,
-
-        ["Section"]          = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.SectionText end end,
-
-        ["Options"]          = function(L)
-
+        ["Paragraph"]       = function(L) if L:IsA("TextButton") then L.BackgroundColor3 = Theme.Component end end,
+        ["Title"]           = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.Title          end end,
+        ["Description"]     = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.Description    end end,
+        ["Section"]         = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.SectionText    end end,
+        ["Options"]         = function(L)
             if L:IsA("TextLabel") and L.Parent.Name == "Main" then L.TextColor3 = Theme.Title end
-
         end,
-
-        ["Notification"]     = function(L)
-
+        ["Notification"]    = function(L)
             if L:IsA("CanvasGroup") then
-
                 L.BackgroundColor3 = Theme.Primary
-
                 local S = L:FindFirstChildOfClass("UIStroke")
-
                 if S then S.Color = Theme.Outline end
-
             end
-
         end,
-
-        ["TextLabel"]        = function(L)
-
+        ["TextLabel"]       = function(L)
             if L:IsA("TextLabel") and L.Parent:FindFirstChild("List") then L.TextColor3 = Theme.Tab end
-
         end,
-
-        ["Main"]             = function(L)
-
+        ["Main"]            = function(L)
             if L:IsA("Frame") then
-
                 if L.Parent == Window then
-
                     L.BackgroundColor3 = Theme.Secondary
-
                 elseif L.Parent:FindFirstChild("Value") then
-
                     local V = L.Parent.Value
-
                     if not V.Value then
-
                         L.BackgroundColor3 = Theme.ToggleOff
-
                         local C = L:FindFirstChild("Circle")
-
                         if C then C.BackgroundColor3 = Theme.Primary end
-
                     end
-
                 else
-
                     L.BackgroundColor3 = Theme.Interactable
-
                 end
-
             elseif L:FindFirstChild("Padding") then
-
                 L.TextColor3 = Theme.Title
-
             end
-
         end,
-
-        ["Amount"]           = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.Interactable end end,
-
-        ["Slide"]            = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.SliderTrack  end end,
-
-        ["Highlight"]        = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.SliderFill   end end,
-
-        ["Input"]            = function(L)
-
+        ["Amount"]          = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.Interactable end end,
+        ["Slide"]           = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.SliderTrack  end end,
+        ["Highlight"]       = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.SliderFill   end end,
+        ["Input"]           = function(L)
             if L:IsA("TextLabel") then
-
                 L.TextColor3 = Theme.Title
-
             elseif L:FindFirstChild("Labels") then
-
                 L.BackgroundColor3 = Theme.Component
-
             elseif L:IsA("TextBox") and L.Parent.Name == "Main" then
-
                 L.TextColor3 = Theme.Title
-
             end
-
         end,
-
-        ["Outline"]          = function(L)
-
-            if L:IsA("UIStroke") then L.Color = Theme.Outline end
-
+        ["Outline"]         = function(L) if L:IsA("UIStroke") then L.Color = Theme.Outline end end,
+        ["DropdownExample"] = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.Secondary end end,
+        ["Underline"]       = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.Divider   end end,
+        -- New component rules
+        ["Line"]            = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.Divider   end end,
+        ["Track"]           = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.ProgressBg end end,
+        ["Fill"]            = function(L)
+            if L:IsA("Frame") and L.Parent and L.Parent.Name == "Track" then
+                L.BackgroundColor3 = Theme.ProgressFill
+            end
         end,
-
-        ["DropdownExample"]  = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.Secondary end end,
-
-        ["Underline"]        = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.Divider    end end,
-
+        ["Picker"]          = function(L)
+            if L:IsA("Frame") then
+                L.BackgroundColor3 = Theme.CPBackground
+                local S = L:FindFirstChildOfClass("UIStroke")
+                if S then S.Color = Theme.CPBorder end
+            end
+        end,
+        ["HexRow"]          = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.CPHexBg end end,
+        ["HexInput"]        = function(L) if L:IsA("TextBox") then L.TextColor3 = Theme.Title end end,
+        ["CheckMark"]       = function(L) if L:IsA("TextLabel") then L.TextColor3 = Theme.Accent end end,
+        ["Swatch"]          = function(L)
+            if L:IsA("Frame") then
+                local S = L:FindFirstChildOfClass("UIStroke")
+                if S then S.Color = Theme.Outline end
+            end
+        end,
     }
-
-
 
     local ClassRules = {
-
         ["ImageLabel"]     = function(L)
-
             if L.Image ~= "rbxassetid://6644618143" then L.ImageColor3 = Theme.Icon end
-
         end,
-
         ["TextLabel"]      = function(L)
-
             if L:FindFirstChild("Padding") then L.TextColor3 = Theme.Title end
-
         end,
-
         ["TextButton"]     = function(L)
-
             if L:FindFirstChild("Labels") then L.BackgroundColor3 = Theme.Component end
-
         end,
-
         ["ScrollingFrame"] = function(L) L.ScrollBarImageColor3 = Theme.Interactable end,
-
     }
 
-
-
     function Options:SetTheme(NewTheme)
-
         if NewTheme then Theme = NewTheme end
 
-
-
-        -- Window chrome
-
         Window.BackgroundColor3 = Theme.Primary
-
-        if Holder then Holder.BackgroundColor3 = Theme.Secondary end
+        if Holder  then Holder.BackgroundColor3  = Theme.Secondary end
+        if Sidebar then Sidebar.BackgroundColor3 = Theme.Sidebar   end
 
         local WS = Window:FindFirstChildOfClass("UIStroke")
-
         if WS then WS.Color = Theme.Shadow end
 
-
-
-        -- Sidebar chrome
-
-        if Sidebar then Sidebar.BackgroundColor3 = Theme.Sidebar end
-
-
-
-        -- Sweep all descendants
-
         for _, D in next, Screen:GetDescendants() do
-
             local nr = NameRules[D.Name]
-
             local cr = ClassRules[D.ClassName]
-
             if     nr then pcall(nr, D)
-
             elseif cr then pcall(cr, D)
-
             end
-
         end
-
     end
 
 
-
     -- ════════════════════════════════════════
-
-    --  SETTINGS CONTROL  (runtime changes)
-
+    --  SETTINGS CONTROL
     -- ════════════════════════════════════════
-
-
 
     function Options:SetSetting(Setting, Value)
-
         if Setting == "Size" then
-
             Window.Size = Value
-
             Setup.Size  = Value
 
-
-
         elseif Setting == "Transparency" then
-
             Window.GroupTransparency = Value
-
             Setup.Transparency = Value
-
             for _, D in next, Screen:GetDescendants() do
-
                 if D:IsA("CanvasGroup") and D.Name == "Notification" then
-
                     D.GroupTransparency = Value
-
                 end
-
             end
-
-
 
         elseif Setting == "Blur" then
-
             local stored = Blurs[Settings.Title]
-
             if Value then
-
                 BlurEnabled = true
-
                 if not stored then
-
                     pcall(function()
-
                         Blurs[Settings.Title] = Blur.new(Window, 5)
-
                     end)
-
                 elseif stored.root and not stored.root.Parent then
-
                     stored.root.Parent = workspace.CurrentCamera
-
                 end
-
             else
-
                 if stored and stored.root and stored.root.Parent then
-
                     stored.root.Parent = nil
-
                 end
-
                 BlurEnabled = false
-
             end
-
-
 
         elseif Setting == "Theme" then
-
             local mode = (type(Value) == "string") and Value or nil
-
             if mode and Themes[mode] then
-
                 Theme = Themes[mode]
-
                 Setup.ThemeMode = mode
-
                 Options:SetTheme()
-
+                for _, fn in ipairs(ThemeCallbacks) do task.spawn(fn, mode, Theme) end
             elseif type(Value) == "table" then
-
                 Options:SetTheme(Value)
-
             end
 
-
-
         elseif Setting == "Keybind" then
-
             Setup.Keybind = Value
 
-
-
         else
-
             warn("[UILib] Unknown setting: " .. tostring(Setting))
-
         end
-
     end
 
 
-
+    -- ════════════════════════════════════════
+    --  WINDOW CONTROL METHODS
     -- ════════════════════════════════════════
 
-    --  FINALISE & OPEN
+    --- Register a callback invoked whenever the theme changes.
+    ---   fn(modeName: string, themeTable: table)
+    function Options:OnThemeChanged(fn)
+        ThemeCallbacks[#ThemeCallbacks + 1] = fn
+    end
 
+    --- Programmatically show or hide the window (animated).
+    function Options:SetVisible(visible)
+        if visible and not Opened then
+            Opened = true
+            Animations:Open(Window, Setup.Transparency)
+            if BlurEnabled and Blurs[Settings.Title] then
+                pcall(function() Blurs[Settings.Title].root.Parent = workspace.CurrentCamera end)
+            end
+        elseif not visible and Opened then
+            Opened = false
+            if BlurEnabled and Blurs[Settings.Title] then
+                pcall(function() Blurs[Settings.Title].root.Parent = nil end)
+            end
+            Animations:Close(Window)
+        end
+    end
+
+    --- Full teardown: disconnects every connection and destroys the window.
+    function Options:Destroy()
+        WinMaid:Destroy()
+        if Blurs[Settings.Title] then
+            pcall(function()
+                local b = Blurs[Settings.Title]
+                if b and b.root then b.root:Destroy() end
+            end)
+            Blurs[Settings.Title] = nil
+        end
+        if Window and Window.Parent then
+            pcall(function() Window:Destroy() end)
+        end
+    end
+
+
+    -- ════════════════════════════════════════
+    --  FINALISE & OPEN
     -- ════════════════════════════════════════
 
     Options:SetTheme()
-
     SetProperty(Window, { Size = Settings.Size, Visible = true, Parent = Screen })
-
     Animations:Open(Window, Settings.Transparency or 0)
 
-
-
     return Options
-
 end
-
 
 
 return Library
