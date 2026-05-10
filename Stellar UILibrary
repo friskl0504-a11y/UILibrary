@@ -1065,6 +1065,167 @@ end
 
 
 -- ─────────────────────────────────────────────
+--  Mobile Square Toggle Button
+-- ─────────────────────────────────────────────
+--[[
+    Creates a floating, draggable square button for mobile users.
+    Tap  → toggle window visibility.
+    Drag → reposition the button anywhere on screen.
+    Only built when IsMobile = true.
+
+    Parameters:
+        ToggleFn  — function()         calls ToggleWindow()
+        TitleText — string             window title (abbreviated on button)
+        GetOpened — function() → bool  returns current window open state
+]]
+local function CreateMobileToggleButton(ToggleFn, TitleText, GetOpened)
+    if not IsMobile then return nil end
+
+    -- ── Square button frame (no UICorner = pure rectangle as requested) ──
+    local Btn = Instance.new("TextButton")
+    Btn.Name               = "MobileToggle"
+    Btn.Size               = UDim2.new(0, 68, 0, 54)
+    Btn.Position           = UDim2.new(1, -78, 1, -70)
+    Btn.AnchorPoint        = Vector2.new(0, 0)
+    Btn.BackgroundColor3   = Theme.AccentDark
+    Btn.BorderSizePixel    = 0
+    Btn.ZIndex             = 120
+    Btn.Text               = ""
+    Btn.AutoButtonColor    = false
+    Btn.Active             = true
+    Btn.Selectable         = false
+    Btn.ClipsDescendants   = false
+
+    -- Left accent strip (visual brand bar)
+    local Strip = Instance.new("Frame")
+    Strip.Name             = "Strip"
+    Strip.Size             = UDim2.new(0, 3, 1, 0)
+    Strip.Position         = UDim2.new(0, 0, 0, 0)
+    Strip.BackgroundColor3 = Theme.Accent
+    Strip.BorderSizePixel  = 0
+    Strip.ZIndex           = 121
+    Strip.Parent           = Btn
+
+    -- Top divider line
+    local Divider = Instance.new("Frame")
+    Divider.Size             = UDim2.new(1, -3, 0, 1)
+    Divider.Position         = UDim2.new(0, 3, 0, 0)
+    Divider.BackgroundColor3 = Theme.Accent
+    Divider.BackgroundTransparency = 0.6
+    Divider.BorderSizePixel  = 0
+    Divider.ZIndex           = 121
+    Divider.Parent           = Btn
+
+    -- Window title (up to 6 chars, uppercased)
+    local AbbrTitle = string.upper(string.sub(TitleText or "UI", 1, 6))
+    local TitleLbl = Instance.new("TextLabel")
+    TitleLbl.Name               = "TitleLbl"
+    TitleLbl.Size               = UDim2.new(1, -10, 0, 22)
+    TitleLbl.Position           = UDim2.new(0, 9, 0, 7)
+    TitleLbl.BackgroundTransparency = 1
+    TitleLbl.Text               = AbbrTitle
+    TitleLbl.Font               = Enum.Font.GothamBold
+    TitleLbl.TextSize           = 12
+    TitleLbl.TextColor3         = Theme.Title
+    TitleLbl.TextXAlignment     = Enum.TextXAlignment.Left
+    TitleLbl.ZIndex             = 122
+    TitleLbl.Parent             = Btn
+
+    -- Status sub-label: shows HIDE / SHOW
+    local StatusLbl = Instance.new("TextLabel")
+    StatusLbl.Name              = "StatusLbl"
+    StatusLbl.Size              = UDim2.new(1, -10, 0, 14)
+    StatusLbl.Position          = UDim2.new(0, 9, 0, 32)
+    StatusLbl.BackgroundTransparency = 1
+    StatusLbl.Text              = "HIDE"
+    StatusLbl.Font              = Enum.Font.Gotham
+    StatusLbl.TextSize          = 9
+    StatusLbl.TextColor3        = Theme.Description
+    StatusLbl.TextXAlignment    = Enum.TextXAlignment.Left
+    StatusLbl.ZIndex            = 122
+    StatusLbl.Parent            = Btn
+
+    Btn.Parent = Screen
+
+    -- ── Drag + Tap Logic ─────────────────────────────────────────────────
+    local DRAG_THRESHOLD = 10
+    local DragStart   = nil
+    local BtnStartPos = nil
+    local IsDragging  = false
+
+    local function UpdateStatus()
+        if GetOpened() then
+            StatusLbl.Text       = "HIDE"
+            StatusLbl.TextColor3 = Theme.Description
+            Strip.BackgroundColor3 = Theme.Accent
+            Tween(Btn, 0.15, { BackgroundColor3 = Theme.AccentDark })
+        else
+            StatusLbl.Text       = "SHOW"
+            StatusLbl.TextColor3 = Theme.Accent
+            Strip.BackgroundColor3 = Theme.AccentDark
+            Tween(Btn, 0.15, {
+                BackgroundColor3 = LerpColor(Theme.AccentDark, Color3.fromRGB(0, 0, 0), 0.35)
+            })
+        end
+    end
+
+    Connect(Btn.InputBegan, function(Input)
+        if Input.UserInputType ~= Enum.UserInputType.Touch then return end
+        IsDragging  = false
+        DragStart   = Vector2.new(Input.Position.X, Input.Position.Y)
+        BtnStartPos = Btn.Position
+
+        Connect(Input.Changed, function()
+            if Input.UserInputState == Enum.UserInputState.End then
+                if not IsDragging then
+                    ToggleFn()
+                    UpdateStatus()
+                end
+                IsDragging  = false
+                DragStart   = nil
+                BtnStartPos = nil
+            elseif DragStart then
+                local pos   = Vector2.new(Input.Position.X, Input.Position.Y)
+                local delta = pos - DragStart
+                if not IsDragging and delta.Magnitude > DRAG_THRESHOLD then
+                    IsDragging = true
+                end
+                if IsDragging and BtnStartPos then
+                    local vp   = workspace.CurrentCamera.ViewportSize
+                    local newX = math.clamp(BtnStartPos.X.Offset + delta.X, 0, vp.X - 70)
+                    local newY = math.clamp(BtnStartPos.Y.Offset + delta.Y, 0, vp.Y - 56)
+                    Btn.Position = UDim2.new(0, newX, 0, newY)
+                end
+            end
+        end)
+    end)
+
+    -- Pulse animation when window is hidden (draws attention to the button)
+    task.spawn(function()
+        local pulseColor = LerpColor(Theme.AccentDark, Color3.fromRGB(0, 0, 0), 0.35)
+        local glowColor  = LerpColor(pulseColor, Theme.Accent, 0.45)
+        while Btn and Btn.Parent do
+            task.wait(0.08)
+            if not GetOpened() then
+                Tween(Btn, 0.6, { BackgroundColor3 = glowColor },
+                    { EasingStyle = Enum.EasingStyle.Sine, EasingDirection = Enum.EasingDirection.InOut })
+                task.wait(0.6)
+                if Btn and Btn.Parent and not GetOpened() then
+                    Tween(Btn, 0.6, { BackgroundColor3 = pulseColor },
+                        { EasingStyle = Enum.EasingStyle.Sine, EasingDirection = Enum.EasingDirection.InOut })
+                    task.wait(0.6)
+                end
+            end
+        end
+    end)
+
+    UpdateStatus()
+    return Btn
+end
+
+
+
+-- ─────────────────────────────────────────────
 
 --  Library.CreateWindow
 
@@ -1380,7 +1541,7 @@ function Library:CreateWindow(Settings)
 
 
 
-    -- ── Keybind toggle
+    -- ── Keybind toggle (keyboard / desktop)
 
     Connect(Services.Input.InputBegan, function(Input, GameFocused)
 
@@ -1393,6 +1554,10 @@ function Library:CreateWindow(Settings)
         end
 
     end)
+
+    -- ── Mobile square toggle button (touch only, draggable)
+    --    Automatically skipped on desktop (IsMobile = false)
+    CreateMobileToggleButton(ToggleWindow, Settings.Title, function() return Opened end)
 
 
 
@@ -2426,7 +2591,7 @@ function Library:CreateWindow(Settings)
 
     -- ════════════════════════════════════════
 
-    --  DROPDOWN
+    --  DROPDOWN  (v2 — Stellar Enhanced)
 
     -- ════════════════════════════════════════
 
@@ -2439,78 +2604,600 @@ function Library:CreateWindow(Settings)
             Cfg = {
 
                 Title:       string
-
-                Description: string
-
-                Options:     { [string]: any }  — index = display, value = callback arg
-
+                Description: string?
+                Options:     { string } | { [string]: any }
+                             Array of strings  OR  dict { displayName = callbackValue }
+                Default:     string?       pre-selected display name
+                MultiSelect: boolean?      allow multiple selections (callback gets { string })
+                Searchable:  boolean?      show a live-filter TextBox at the top
                 Tab:         Instance
-
-                Callback:    function(value)
+                Callback:    function(val) val = string OR { string } when MultiSelect
 
             }
+
+            Returns DropdownObj:
+                :GetValue()             → string | { string }
+                :SetValue(displayName)  → update selection programmatically
+                :SetOptions(newOpts)    → swap option list at runtime
+                :Close()               → close panel if open
 
         ]]
 
         local Dropdown = Components and Clone(Components["Dropdown"])
 
-        if not Dropdown then return end
+        if not Dropdown then return {} end
 
 
 
         local Title, Desc = Options:GetLabels(Dropdown)
 
-        local OptionsLabel = Dropdown:FindFirstChild("Main") and Dropdown.Main:FindFirstChild("Options")
+        local SelectLabel = Dropdown:FindFirstChild("Main") and Dropdown.Main:FindFirstChild("Options")
+
+        local ArrowIcon   = Dropdown:FindFirstChild("Main") and Dropdown.Main:FindFirstChild("Arrow")
 
 
 
-        Connect(Dropdown.MouseButton1Click, function()
+        -- Normalise options into ordered array { display: string, value: any }
 
-            local Example = Clone(Examples["DropdownExample"])
+        local function NormaliseOpts(raw)
 
-            if not Example then return end
+            local arr = {}
+
+            if not raw then return arr end
+
+            if #raw > 0 then
+
+                for _, v in ipairs(raw) do
+
+                    table.insert(arr, { display = tostring(v), value = v })
+
+                end
+
+            else
+
+                for k, v in next, raw do
+
+                    table.insert(arr, { display = tostring(k), value = v })
+
+                end
+
+            end
+
+            return arr
+
+        end
 
 
 
-            local CloseButtons = Example:FindFirstChild("Top") and Example.Top:FindFirstChild("Buttons")
+        local OrderedOpts = NormaliseOpts(Cfg.Options)
 
-            local ScrollFrame  = Example:FindFirstChild("ScrollingFrame") or Example
+        local Selected    = {}   -- { [displayName] = true }
 
+        local IsOpen      = false
 
+        local PanelFrame  = nil
 
-            if BG then Tween(BG, 0.18, { BackgroundTransparency = 0.5 }) end
-
-            Example.Parent = Window
-
-            Animations:Open(Example, 0, true)
+        local BlockerBtn  = nil
 
 
 
-            local function CloseDropdown()
+        -- Apply default selection
 
-                if BG then Tween(BG, 0.18, { BackgroundTransparency = 1 }) end
+        if Cfg.Default then
 
-                Animations:Close(Example)
+            Selected[tostring(Cfg.Default)] = true
 
-                task.wait(2)
+        end
 
-                if Example and Example.Parent then Destroy(Example) end
+
+
+        -- Display text for the closed-state label
+
+        local function GetDisplayText()
+
+            local count, first = 0, nil
+
+            for k in next, Selected do
+
+                count += 1
+
+                if not first then first = k end
+
+            end
+
+            if count == 0 then return "Select..." end
+
+            if count == 1 then return first end
+
+            return tostring(count) .. " selected"
+
+        end
+
+
+
+        local function UpdateLabel()
+
+            if SelectLabel then SelectLabel.Text = GetDisplayText() end
+
+        end
+
+
+
+        local function FireCB()
+
+            if not Cfg.Callback then return end
+
+            if Cfg.MultiSelect then
+
+                local t = {}
+
+                for k in next, Selected do table.insert(t, k) end
+
+                Cfg.Callback(t)
+
+            else
+
+                local key = next(Selected)
+
+                if key then
+
+                    for _, o in ipairs(OrderedOpts) do
+
+                        if o.display == key then Cfg.Callback(o.value) return end
+
+                    end
+
+                    Cfg.Callback(key)
+
+                else
+
+                    Cfg.Callback(nil)
+
+                end
+
+            end
+
+        end
+
+
+
+        UpdateLabel()
+
+
+
+        -- ── Panel Close ───────────────────────────────────────────────────
+
+        local function ClosePanel()
+
+            if not IsOpen then return end
+
+            IsOpen = false
+
+            if ArrowIcon then Tween(ArrowIcon, 0.18, { Rotation = 0 }) end
+
+            if BlockerBtn and BlockerBtn.Parent then
+
+                Destroy(BlockerBtn)
+
+                BlockerBtn = nil
+
+            end
+
+            if PanelFrame and PanelFrame.Parent then
+
+                local ref = PanelFrame
+
+                PanelFrame = nil
+
+                Tween(ref, 0.15, { GroupTransparency = 1 })
+
+                task.delay(0.18, function()
+
+                    if ref and ref.Parent then Destroy(ref) end
+
+                end)
+
+            end
+
+        end
+
+
+
+        -- ── Panel Open ────────────────────────────────────────────────────
+
+        local function OpenPanel()
+
+            if IsOpen then ClosePanel() return end
+
+            IsOpen = true
+
+            if ArrowIcon then Tween(ArrowIcon, 0.18, { Rotation = 180 }) end
+
+
+
+            -- Position below the dropdown button, flush to its left edge
+
+            local vp       = workspace.CurrentCamera.ViewportSize
+
+            local absPos   = Dropdown.AbsolutePosition
+
+            local absSize  = Dropdown.AbsoluteSize
+
+            local PanelW   = math.max(absSize.X, 180)
+
+            local MaxH     = math.min(220, vp.Y * 0.38)
+
+            local PosX     = absPos.X
+
+            local PosY     = absPos.Y + absSize.Y + 3
+
+            -- Flip above if not enough space below
+
+            if PosY + MaxH > vp.Y - 8 then
+
+                PosY = absPos.Y - MaxH - 3
 
             end
 
 
 
-            if CloseButtons then
+            -- ── Blocker — full-screen invisible button, closes on outside tap/click
 
-                for _, Btn in next, CloseButtons:GetChildren() do
+            BlockerBtn = Instance.new("TextButton")
 
-                    if Btn:IsA("TextButton") then
+            BlockerBtn.Name                  = "DDBlocker"
 
-                        Animations:Hover(Btn)
+            BlockerBtn.Size                  = UDim2.fromScale(1, 1)
 
-                        Connect(Btn.MouseButton1Click, CloseDropdown)
+            BlockerBtn.BackgroundTransparency = 1
+
+            BlockerBtn.Text                  = ""
+
+            BlockerBtn.ZIndex                = 48
+
+            BlockerBtn.Parent                = Screen
+
+            Connect(BlockerBtn.MouseButton1Click, ClosePanel)
+
+            Connect(BlockerBtn.InputBegan, function(inp)
+
+                if inp.UserInputType == Enum.UserInputType.Touch then ClosePanel() end
+
+            end)
+
+
+
+            -- ── Panel (CanvasGroup for GroupTransparency fade) ─────────────
+
+            PanelFrame = Instance.new("CanvasGroup")
+
+            PanelFrame.Name               = "DropdownPanel"
+
+            PanelFrame.Size               = UDim2.new(0, PanelW, 0, 0)
+
+            PanelFrame.Position           = UDim2.new(0, PosX, 0, PosY)
+
+            PanelFrame.BackgroundColor3   = Theme.Secondary
+
+            PanelFrame.BorderSizePixel    = 0
+
+            PanelFrame.GroupTransparency  = 1
+
+            PanelFrame.ZIndex             = 50
+
+            PanelFrame.ClipsDescendants   = true
+
+
+
+            local PStroke = Instance.new("UIStroke")
+
+            PStroke.Color     = Theme.Outline
+
+            PStroke.Thickness = 1
+
+            PStroke.Parent    = PanelFrame
+
+
+
+            local PCorner = Instance.new("UICorner")
+
+            PCorner.CornerRadius = UDim.new(0, 6)
+
+            PCorner.Parent       = PanelFrame
+
+
+
+            -- ── Optional search box ────────────────────────────────────────
+
+            local SearchOffsetY = 0
+
+            local SearchBox     = nil
+
+            local searchQuery   = ""
+
+
+
+            if Cfg.Searchable then
+
+                SearchOffsetY = 36
+
+                SearchBox = Instance.new("TextBox")
+
+                SearchBox.Name              = "SearchBox"
+
+                SearchBox.Size              = UDim2.new(1, -14, 0, 26)
+
+                SearchBox.Position          = UDim2.new(0, 7, 0, 5)
+
+                SearchBox.BackgroundColor3  = Theme.Interactable
+
+                SearchBox.BorderSizePixel   = 0
+
+                SearchBox.PlaceholderText   = "Search..."
+
+                SearchBox.PlaceholderColor3 = Theme.Muted
+
+                SearchBox.TextColor3        = Theme.Title
+
+                SearchBox.Font              = Enum.Font.Gotham
+
+                SearchBox.TextSize          = 12
+
+                SearchBox.ClearTextOnFocus  = false
+
+                SearchBox.Text              = ""
+
+                SearchBox.ZIndex            = 52
+
+                Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 4)
+
+                local SP = Instance.new("UIPadding", SearchBox)
+
+                SP.PaddingLeft = UDim.new(0, 8)
+
+                SearchBox.Parent = PanelFrame
+
+            end
+
+
+
+            -- ── Scrolling list ─────────────────────────────────────────────
+
+            local Scroll = Instance.new("ScrollingFrame")
+
+            Scroll.Name                   = "OptionsScroll"
+
+            Scroll.Size                   = UDim2.new(1, 0, 1, -SearchOffsetY)
+
+            Scroll.Position               = UDim2.new(0, 0, 0, SearchOffsetY)
+
+            Scroll.BackgroundTransparency = 1
+
+            Scroll.BorderSizePixel        = 0
+
+            Scroll.ScrollBarThickness     = 3
+
+            Scroll.ScrollBarImageColor3   = Theme.Accent
+
+            Scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+
+            Scroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+
+            Scroll.ZIndex                 = 51
+
+            Scroll.ClipsDescendants       = true
+
+            Scroll.Parent                 = PanelFrame
+
+
+
+            local ListLayout = Instance.new("UIListLayout")
+
+            ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+            ListLayout.Padding   = UDim.new(0, 2)
+
+            ListLayout.Parent    = Scroll
+
+
+
+            local ListPad = Instance.new("UIPadding")
+
+            ListPad.PaddingLeft   = UDim.new(0, 5)
+
+            ListPad.PaddingRight  = UDim.new(0, 5)
+
+            ListPad.PaddingTop    = UDim.new(0, 4)
+
+            ListPad.PaddingBottom = UDim.new(0, 4)
+
+            ListPad.Parent        = Scroll
+
+
+
+            -- ── Build / Rebuild option rows (called on open and on search) ──
+
+            local function BuildOpts()
+
+                for _, c in next, Scroll:GetChildren() do
+
+                    if c:IsA("TextButton") or c:IsA("TextLabel") then Destroy(c) end
+
+                end
+
+
+
+                local shown = 0
+
+                local rowH  = IsMobile and 38 or 30
+
+
+
+                for i, opt in ipairs(OrderedOpts) do
+
+                    local disp = opt.display
+
+                    if searchQuery ~= "" and not disp:lower():find(searchQuery, 1, true) then
+
+                        continue
 
                     end
+
+                    shown += 1
+
+                    local isSel = Selected[disp] == true
+
+
+
+                    local ItemBtn = Instance.new("TextButton")
+
+                    ItemBtn.Name             = "DDOpt_" .. tostring(i)
+
+                    ItemBtn.Size             = UDim2.new(1, 0, 0, rowH)
+
+                    ItemBtn.BackgroundColor3 = isSel and Theme.Interactable or Theme.Component
+
+                    ItemBtn.BorderSizePixel  = 0
+
+                    ItemBtn.Text             = ""
+
+                    ItemBtn.LayoutOrder      = i
+
+                    ItemBtn.ZIndex           = 53
+
+                    ItemBtn.AutoButtonColor  = false
+
+                    Instance.new("UICorner", ItemBtn).CornerRadius = UDim.new(0, 5)
+
+
+
+                    -- Option label
+
+                    local ItemLbl = Instance.new("TextLabel")
+
+                    ItemLbl.Size               = UDim2.new(1, isSel and -34 or -14, 1, 0)
+
+                    ItemLbl.Position           = UDim2.new(0, 10, 0, 0)
+
+                    ItemLbl.BackgroundTransparency = 1
+
+                    ItemLbl.Text               = disp
+
+                    ItemLbl.Font               = Enum.Font.Gotham
+
+                    ItemLbl.TextSize           = IsMobile and 14 or 13
+
+                    ItemLbl.TextColor3         = isSel and Theme.TabActive or Theme.Tab
+
+                    ItemLbl.TextXAlignment     = Enum.TextXAlignment.Left
+
+                    ItemLbl.TextTruncate       = Enum.TextTruncate.AtEnd
+
+                    ItemLbl.ZIndex             = 54
+
+                    ItemLbl.Parent             = ItemBtn
+
+
+
+                    -- Checkmark for selected state
+
+                    if isSel then
+
+                        local ChkLbl = Instance.new("TextLabel")
+
+                        ChkLbl.Size               = UDim2.new(0, 22, 1, 0)
+
+                        ChkLbl.Position           = UDim2.new(1, -28, 0, 0)
+
+                        ChkLbl.BackgroundTransparency = 1
+
+                        ChkLbl.Text               = "✓"
+
+                        ChkLbl.Font               = Enum.Font.GothamBold
+
+                        ChkLbl.TextSize           = 13
+
+                        ChkLbl.TextColor3         = Theme.Accent
+
+                        ChkLbl.ZIndex             = 54
+
+                        ChkLbl.Parent             = ItemBtn
+
+                    end
+
+
+
+                    ItemBtn.Parent = Scroll
+
+                    Animations:Hover(ItemBtn)
+
+
+
+                    local captureDisp = disp
+
+                    Connect(ItemBtn.MouseButton1Click, function()
+
+                        if Cfg.MultiSelect then
+
+                            if Selected[captureDisp] then
+
+                                Selected[captureDisp] = nil
+
+                            else
+
+                                Selected[captureDisp] = true
+
+                            end
+
+                            BuildOpts()
+
+                        else
+
+                            Selected = {}
+
+                            Selected[captureDisp] = true
+
+                            BuildOpts()
+
+                        end
+
+                        UpdateLabel()
+
+                        FireCB()
+
+                        if not Cfg.MultiSelect then
+
+                            task.defer(ClosePanel)
+
+                        end
+
+                    end)
+
+                end
+
+
+
+                -- Empty / no-results state
+
+                if shown == 0 then
+
+                    local EmptyLbl = Instance.new("TextLabel")
+
+                    EmptyLbl.Size               = UDim2.new(1, 0, 0, 30)
+
+                    EmptyLbl.BackgroundTransparency = 1
+
+                    EmptyLbl.Text               = searchQuery ~= "" and "No results" or "No options"
+
+                    EmptyLbl.Font               = Enum.Font.Gotham
+
+                    EmptyLbl.TextSize           = 12
+
+                    EmptyLbl.TextColor3         = Theme.Muted
+
+                    EmptyLbl.ZIndex             = 52
+
+                    EmptyLbl.Parent             = Scroll
 
                 end
 
@@ -2518,71 +3205,114 @@ function Library:CreateWindow(Settings)
 
 
 
-            for Index, Option in next, Cfg.Options do
-
-                local Btn = Clone(Examples["DropdownButtonExample"])
-
-                if not Btn then continue end
+            BuildOpts()
 
 
 
-                local BTitle, _ = Options:GetLabels(Btn)
+            -- Hook search after BuildOpts is in scope
 
-                local Selected  = Btn:FindFirstChild("Value")
+            if SearchBox then
 
+                Connect(SearchBox:GetPropertyChangedSignal("Text"), function()
 
+                    searchQuery = SearchBox.Text:lower()
 
-                if BTitle then BTitle.Text = tostring(Index) end
-
-                SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
-
-                Animations:Hover(Btn)
-
-
-
-                Connect(Btn.MouseButton1Click, function()
-
-                    local IsSelected = not (Selected and Selected.Value)
-
-                    if IsSelected then
-
-                        Tween(Btn, 0.18, { BackgroundColor3 = Theme.Interactable })
-
-                        if Cfg.Callback then Cfg.Callback(Option) end
-
-                        if OptionsLabel then OptionsLabel.Text = tostring(Index) end
-
-                        -- Deselect others
-
-                        for _, Other in next, ScrollFrame:GetChildren() do
-
-                            if Other:IsA("TextButton") and Other ~= Btn then
-
-                                Tween(Other, 0.18, { BackgroundColor3 = Theme.Component })
-
-                                local OV = Other:FindFirstChild("Value")
-
-                                if OV then OV.Value = false end
-
-                            end
-
-                        end
-
-                    else
-
-                        Tween(Btn, 0.18, { BackgroundColor3 = Theme.Component })
-
-                    end
-
-                    if Selected then Selected.Value = IsSelected end
-
-                    CloseDropdown()
+                    BuildOpts()
 
                 end)
 
             end
 
-        end)
+
+
+            -- Animate panel open (expand height + fade in) after 1 deferred frame
+            -- so AbsoluteContentSize is populated
+
+            PanelFrame.Parent = Screen
+
+            task.defer(function()
+
+                if not PanelFrame then return end
+
+                local contentH = ListLayout.AbsoluteContentSize.Y + SearchOffsetY + 8
+
+                local targetH  = math.clamp(contentH, IsMobile and 44 or 34, MaxH)
+
+                Tween(PanelFrame, 0.18, {
+
+                    Size             = UDim2.new(0, PanelW, 0, targetH),
+
+                    GroupTransparency = 0,
+
+                })
+
+            end)
+
+        end
+
+
+
+        -- ── Trigger open/close ────────────────────────────────────────────
+
+        Connect(Dropdown.MouseButton1Click, OpenPanel)
+
+
+
+        -- ── Returned API object ───────────────────────────────────────────
+
+        local DropdownObj = {}
+
+
+
+        function DropdownObj:GetValue()
+
+            if Cfg.MultiSelect then
+
+                local t = {}
+
+                for k in next, Selected do table.insert(t, k) end
+
+                return t
+
+            end
+
+            return next(Selected)
+
+        end
+
+
+
+        function DropdownObj:SetValue(val)
+
+            local disp = tostring(val)
+
+            if not Cfg.MultiSelect then Selected = {} end
+
+            Selected[disp] = true
+
+            UpdateLabel()
+
+        end
+
+
+
+        function DropdownObj:SetOptions(newOpts)
+
+            OrderedOpts = NormaliseOpts(newOpts)
+
+            if IsOpen then ClosePanel() end
+
+            UpdateLabel()
+
+        end
+
+
+
+        function DropdownObj:Close()
+
+            ClosePanel()
+
+        end
 
 
 
@@ -2593,6 +3323,10 @@ function Library:CreateWindow(Settings)
         if Desc  then Desc.Text  = Cfg.Description or "" end
 
         SetProperty(Dropdown, { Name = Cfg.Title, Parent = Cfg.Tab, Visible = true })
+
+
+
+        return DropdownObj
 
     end
 
