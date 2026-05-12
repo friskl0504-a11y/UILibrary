@@ -1,71 +1,80 @@
 --[[
 
     ╔══════════════════════════════════════════════════════════╗
-    ║   User Interface Library  —  Stellar  v4.0              ║
-    ║   Original: Friskl  |  v3.0 → v4.0 Modernization Update  ║
+    ║   User Interface Library  —  Stellar  v5.0              ║
+    ║   "Lean & Modern" — major restructure                    ║
     ╚══════════════════════════════════════════════════════════╝
 
-    CHANGELOG (v4.0 — Modernization & Polish):
+    CHANGELOG (v5.0 — Lean & Modern Edition):
 
-    ── VISUAL OVERHAUL  ─────────────────────────────────────
-    • NEW: Modern colour palettes — deep blue-tinted blacks
-          and refined violet accent (inspired by Linear / Vercel).
-          Strokes use subtle low-alpha for a glassy feel.
-    • NEW: Surface elevation tiers (Primary < Secondary < Elevated)
-          + per-state colours (Hover, Pressed, Focus).
-    • NEW: Soft glow on Toggle ON state (UIStroke pulse).
-    • NEW: Subtle accent gradient on primary action buttons.
-    • NEW: Modal open animation — spring scale-in + fade
-          (replaces the basic Quart-out tween).
-    • NEW: Tab cross-fade transition.
+    ── PHILOSOPHY ───────────────────────────────────────────
+    Less surface area, sharper components. v5 removes anything
+    that nobody used in real admin / executor scripts, and
+    invests the saved lines in things that change daily DX:
+    state binding, a builder API, profiles, new components.
 
-    ── ANIMATION SYSTEM  ────────────────────────────────────
-    • NEW: Easing presets — Smooth / Snap / Soft / Spring / Bounce
-          (cubic curves chosen for modern motion language).
-    • NEW: Animations:Press(obj)  — scale-down on press (tactile).
-    • NEW: Animations:Lift(obj)   — Y-offset on hover (PC).
-    • NEW: Animations:Pulse(obj)  — attention-grab stroke pulse.
-    • NEW: Animations:Ripple(obj) — material-style touch ripple.
-    • IMPROVED: Animations:Hover  — cubic easing, refined hover lerp.
-    • IMPROVED: Animations:Open   — spring scale + stroke fade-in.
+    ── REMOVED  ─────────────────────────────────────────────
+    • Dead code: Pulse, CrossFade, Lift, Bounce easing,
+      GetFlags(), IsConsole, SetTheme custom-table.
+    • Niche components: CodeBlock, Paragraph, TabBadge,
+      Maximize button, SearchableDropdown, Section collapse,
+      HexInput, Blur HTTP module.
+    • Light theme palette (all themes are now dark variants;
+      admin tools overlay live game lighting → dark wins).
+    • Toggle effect over-stacking — only glow + spring knob now
+      (was glow + spring + ripple + hover, 4 effects per click).
 
-    ── PERFORMANCE  ─────────────────────────────────────────
-    • NEW: TweenManager — automatically cancels a prior tween
-          on (instance, property) before starting a new one.
-          Prevents tween stacking on rapid state changes
-          (was: 100 toggle clicks = 100 queued tweens).
-    • OPTIMISED: Theme engine — per-window descendant cache
-          (built lazily, invalidated when components are added).
-          Old code re-walked the FULL screen tree (incl. other
-          windows + global components) on every SetTheme call.
-    • OPTIMISED: ipairs → numeric for-loop in tight InputHub
-          fanout; cached length, reduces per-frame overhead.
-    • OPTIMISED: Tween reuse — Hover/Press cache a single
-          tween-info instead of reconstructing each call.
+    ── ADDED  ───────────────────────────────────────────────
+    • STATE SYSTEM (new):
+        local power = State.new(50)
+        slider = section:Slider{ State = power }
+        power:Get(); power:Set(80); power:OnChanged(fn)
+      Multiple components can bind to the same State and stay
+      synced. Foundation for forms, dirty tracking, derived UI.
 
-    ── COMPONENT POLISH  ────────────────────────────────────
-    • Toggle: Spring-based knob travel, ON-state glow,
-          ripple feedback on tap.
-    • Button: Press scale (0.97), accent gradient option,
-          touch ripple on mobile.
-    • Slider: Thumb lifts on grab, smoother fill colour blend.
-    • Dropdown / MultiDropdown: Panel slide-in spring,
-          option-row highlight on hover.
-    • ColorPicker: Larger thumb, smoother SV-canvas tracking.
-    • Notification: Stack offset animation when newer arrives.
+    • BUILDER API (new):
+        local tab = window:Tab{ Title = "Main", Icon = "..." }
+        local sec = tab:Section{ Title = "Combat" }
+        sec:Toggle{ Title = "Auto-aim", Default = false }
+        sec:Slider{ Title = "FOV",  Min = 0, Max = 360 }
+      Returns the controller chain; the old Cfg.Tab pattern
+      still works for backwards compatibility.
 
-    ── INHERITED FROM v3.0  ─────────────────────────────────
-    Per-window state, InputHub, FAB, haptics, tooltips,
-    confirm modal, searchable dropdown, config save/load,
-    full bug-fix audit (drag/keybind/slider/dropdown leaks),
-    mobile touch-zone sizing.
+    • THEME PRESETS (new):  Default, Midnight, Tokyo, Mocha
+      All are dark. Switch with Options:SetTheme("Tokyo").
 
-    ── WINDOW API  ───────────────────────────────────────────
-    Options:Destroy()           — full teardown (every connection)
-    Options:SetVisible(bool)    — animated show/hide
-    Options:OnThemeChanged(fn)  — listen for theme changes
+    • DENSITY MODE (new):  Compact / Comfortable
+      Compact = power users; Comfortable = mobile-first.
+      Adjusts all component heights + padding globally.
+
+    • SetAccent(color) (new): one-call accent override that
+      propagates to every accent-coloured node in the window.
+
+    • COMPONENTS (new):
+        :RadioGroup{Options=..., Default=...}    -- 1-of-N
+        :Stepper{Min, Max, Step, Default}         -- +/- buttons
+
+    • PROFILE SYSTEM (new):
+        Options:SaveProfile("PvP")
+        Options:LoadProfile("PvP")
+        Options:ListProfiles() → { "Default", "PvP", "Farm" }
+        Options:SetAutoSave(true) -- debounced auto-save on change
+
+    ── INHERITED FROM v3/v4  ────────────────────────────────
+    Per-window state, InputHub, TweenManager, FAB, haptics,
+    tooltips, confirm modal, animations module, full bug-fix
+    audit (drag/keybind/slider/dropdown leaks), mobile touch
+    zones, ColorPicker, full theme engine with per-window cache.
+
+    ── WINDOW API SUMMARY  ──────────────────────────────────
+    Options:Tab{cfg} / Options:SetTab(name)
+    Options:Notify(cfg) / Confirm(cfg) / Tooltip(c, text)
+    Options:SetTheme(name) / SetAccent(color) / SetDensity(d)
     Options:GetConfig() / LoadConfig(t)
-    Options:SetTab(name) / Notify(cfg) / Confirm(cfg) / Tooltip(c, t)
+    Options:SaveProfile(n) / LoadProfile(n) / ListProfiles()
+    Options:SetAutoSave(bool, key?)
+    Options:SetVisible(bool) / IsVisible() / Destroy()
+    Options:OnThemeChanged(fn)
 
 ]]
 
@@ -104,7 +113,6 @@ local Player = {
 -- ═════════════════════════════════════════════════════════════
 
 local IsMobile  = Services.Input.TouchEnabled and not Services.Input.KeyboardEnabled
-local IsConsole = Services.GuiSvc:IsTenFootInterface()
 -- ScreenSize for mobile-portrait detection (affects notification stack origin)
 local function IsPortrait()
     local cam = workspace.CurrentCamera
@@ -119,171 +127,233 @@ end
 -- ═════════════════════════════════════════════════════════════
 
 --[[
-    v4.0 modern palettes
-    ────────────────────
-    Dark  — deep blue-tinted blacks (Linear / Vercel feel), vibrant
-            violet accent (#7C5CFF), subtle low-alpha strokes.
-    Light — warm off-whites, indigo accent (#5B6BFF), gentle dividers.
+    v5.0 theme variants (all dark — Light theme removed)
+    ─────────────────────────────────────────────────────
+    Default  — refined violet on near-black (Linear / Vercel feel)
+    Midnight — colder navy-blacks, cyan-shifted accent
+    Tokyo    — Tokyo-Night style: muted blue-grey, neon purple
+    Mocha    — Catppuccin-Mocha inspired: warm dark, mauve accent
 
-    Surface elevation tiers:   Primary < Secondary < Component < Elevated
-    State colours:             Hover, Pressed, Focus
-    Semantic:                  Success, Warning, Danger, Info
+    Surface tiers (3 only — was 5): Primary < Secondary < Elevated
+    State colours: Hover, Pressed
+    Semantic:      Success, Warning, Danger
+    (Info removed — was visually identical to Accent)
 ]]
+
+local function _buildTheme(p)
+    -- Fill any missing optional fields from sensible defaults so component
+    -- code never has to nil-check theme keys.
+    p.Hover       = p.Hover       or p.Secondary
+    p.Pressed     = p.Pressed     or p.Primary
+    p.AccentLight = p.AccentLight or p.Accent
+    p.AccentDark  = p.AccentDark  or p.Accent
+    p.FocusRing   = p.FocusRing   or p.Accent
+    p.SliderThumb = p.SliderThumb or Color3.new(1, 1, 1)
+    p.ToggleKnob  = p.ToggleKnob  or Color3.new(1, 1, 1)
+    p.BadgeBg     = p.BadgeBg     or p.Accent
+    p.BadgeText   = p.BadgeText   or Color3.new(1, 1, 1)
+    -- Code-block "traffic-light" colours stay constant across themes
+    p.CodeDotRed     = Color3.fromRGB(255,  95,  87)
+    p.CodeDotYellow  = Color3.fromRGB(255, 189,  46)
+    p.CodeDotGreen   = Color3.fromRGB( 40, 201,  64)
+    return p
+end
+
 local Themes = {
 
-    Dark = {
-        -- Surfaces (low → high elevation)
-        Primary       = Color3.fromRGB( 11,  11,  16),  -- darkest (window root)
-        Secondary     = Color3.fromRGB( 17,  17,  23),  -- holder panel
-        Component     = Color3.fromRGB( 22,  22,  30),  -- card / interactive bg
-        Interactable  = Color3.fromRGB( 32,  32,  44),  -- pressed / track
-        Elevated      = Color3.fromRGB( 26,  26,  34),  -- dropdown / modal
+    Default = _buildTheme({
+        Primary       = Color3.fromRGB( 11,  11,  16),
+        Secondary     = Color3.fromRGB( 17,  17,  23),
+        Component     = Color3.fromRGB( 22,  22,  30),
+        Interactable  = Color3.fromRGB( 32,  32,  44),
+        Elevated      = Color3.fromRGB( 26,  26,  34),
         Sidebar       = Color3.fromRGB( 14,  14,  20),
 
-        -- Text
         Title         = Color3.fromRGB(242, 243, 248),
         Description   = Color3.fromRGB(135, 138, 156),
         Tab           = Color3.fromRGB(168, 170, 186),
         TabActive     = Color3.fromRGB(248, 249, 252),
-        Muted         = Color3.fromRGB( 90,  92, 110),
         SectionText   = Color3.fromRGB(155, 158, 178),
 
-        -- Accent (violet)
         Accent        = Color3.fromRGB(124,  92, 255),
-        AccentDark    = Color3.fromRGB( 95,  68, 215),
         AccentLight   = Color3.fromRGB(160, 135, 255),
-        AccentAlpha   = Color3.fromRGB(124,  92, 255),
+        AccentDark    = Color3.fromRGB( 95,  68, 215),
 
-        -- Strokes & dividers (very subtle modern look)
         Outline       = Color3.fromRGB( 38,  38,  52),
         Shadow        = Color3.fromRGB(  0,   0,   0),
         Divider       = Color3.fromRGB( 28,  28,  38),
-        FocusRing     = Color3.fromRGB(124,  92, 255),
 
-        -- Interaction states
-        Hover         = Color3.fromRGB( 30,  30,  42),  -- bg overlay on hover
-        Pressed       = Color3.fromRGB( 24,  24,  34),  -- bg on press
+        Hover         = Color3.fromRGB( 30,  30,  42),
+        Pressed       = Color3.fromRGB( 24,  24,  34),
 
-        -- Toggle
         ToggleOn      = Color3.fromRGB(124,  92, 255),
         ToggleOff     = Color3.fromRGB( 48,  48,  62),
-        ToggleKnob    = Color3.fromRGB(255, 255, 255),
-        ToggleGlow    = Color3.fromRGB(160, 135, 255),
 
-        -- Slider
         SliderFill    = Color3.fromRGB(124,  92, 255),
         SliderTrack   = Color3.fromRGB( 38,  38,  52),
-        SliderThumb   = Color3.fromRGB(255, 255, 255),
 
-        -- Icon
         Icon          = Color3.fromRGB(168, 170, 186),
         IconActive    = Color3.fromRGB(124,  92, 255),
 
-        -- Code block "traffic light" dots
-        CodeDotRed    = Color3.fromRGB(255,  95,  87),
-        CodeDotYellow = Color3.fromRGB(255, 189,  46),
-        CodeDotGreen  = Color3.fromRGB( 40, 201,  64),
-
-        -- Progress bar
         ProgressBg    = Color3.fromRGB( 32,  32,  44),
         ProgressFill  = Color3.fromRGB(124,  92, 255),
 
-        -- Colour-picker subpieces
         CPBackground  = Color3.fromRGB( 24,  24,  32),
         CPBorder      = Color3.fromRGB( 50,  50,  68),
-        CPHexBg       = Color3.fromRGB( 32,  32,  44),
 
-        -- Tooltip
         TooltipBg     = Color3.fromRGB(  8,   8,  12),
         TooltipText   = Color3.fromRGB(245, 246, 250),
 
-        -- Badge
-        BadgeBg       = Color3.fromRGB(124,  92, 255),
-        BadgeText     = Color3.fromRGB(255, 255, 255),
-
-        -- Semantic
         Success       = Color3.fromRGB( 52, 211, 132),
         Warning       = Color3.fromRGB(255, 189,  46),
         Danger        = Color3.fromRGB(248,  92,  92),
-        Info          = Color3.fromRGB( 96, 165, 250),
-    },
+    }),
 
-    Light = {
-        -- Surfaces
-        Primary       = Color3.fromRGB(252, 252, 254),
-        Secondary     = Color3.fromRGB(245, 245, 250),
-        Component     = Color3.fromRGB(238, 239, 245),
-        Interactable  = Color3.fromRGB(220, 222, 232),
-        Elevated      = Color3.fromRGB(252, 252, 254),
-        Sidebar       = Color3.fromRGB(242, 243, 248),
+    Midnight = _buildTheme({
+        Primary       = Color3.fromRGB(  8,  10,  18),
+        Secondary     = Color3.fromRGB( 14,  16,  26),
+        Component     = Color3.fromRGB( 18,  22,  34),
+        Interactable  = Color3.fromRGB( 28,  34,  50),
+        Elevated      = Color3.fromRGB( 22,  26,  40),
+        Sidebar       = Color3.fromRGB( 10,  13,  22),
 
-        -- Text
-        Title         = Color3.fromRGB( 15,  17,  26),
-        Description   = Color3.fromRGB( 88,  92, 110),
-        Tab           = Color3.fromRGB( 60,  64,  82),
-        TabActive     = Color3.fromRGB( 15,  17,  26),
-        Muted         = Color3.fromRGB(138, 142, 160),
-        SectionText   = Color3.fromRGB( 80,  84, 105),
+        Title         = Color3.fromRGB(232, 240, 255),
+        Description   = Color3.fromRGB(125, 140, 170),
+        Tab           = Color3.fromRGB(155, 170, 200),
+        TabActive     = Color3.fromRGB(240, 248, 255),
+        SectionText   = Color3.fromRGB(140, 158, 188),
 
-        -- Accent
-        Accent        = Color3.fromRGB( 91, 107, 255),
-        AccentDark    = Color3.fromRGB( 68,  85, 220),
-        AccentLight   = Color3.fromRGB(130, 145, 255),
-        AccentAlpha   = Color3.fromRGB( 91, 107, 255),
+        Accent        = Color3.fromRGB( 56, 189, 248),
+        AccentLight   = Color3.fromRGB(110, 210, 255),
+        AccentDark    = Color3.fromRGB( 24, 144, 220),
 
-        -- Strokes & dividers
-        Outline       = Color3.fromRGB(218, 220, 232),
-        Shadow        = Color3.fromRGB(180, 184, 200),
-        Divider       = Color3.fromRGB(228, 230, 240),
-        FocusRing     = Color3.fromRGB( 91, 107, 255),
+        Outline       = Color3.fromRGB( 32,  40,  60),
+        Shadow        = Color3.fromRGB(  0,   0,   0),
+        Divider       = Color3.fromRGB( 24,  30,  46),
 
-        -- Interaction states
-        Hover         = Color3.fromRGB(232, 234, 245),
-        Pressed       = Color3.fromRGB(220, 222, 234),
+        Hover         = Color3.fromRGB( 26,  32,  50),
+        Pressed       = Color3.fromRGB( 20,  24,  40),
 
-        -- Toggle
-        ToggleOn      = Color3.fromRGB( 91, 107, 255),
-        ToggleOff     = Color3.fromRGB(190, 194, 210),
-        ToggleKnob    = Color3.fromRGB(255, 255, 255),
-        ToggleGlow    = Color3.fromRGB(130, 145, 255),
+        ToggleOn      = Color3.fromRGB( 56, 189, 248),
+        ToggleOff     = Color3.fromRGB( 42,  50,  72),
 
-        -- Slider
-        SliderFill    = Color3.fromRGB( 91, 107, 255),
-        SliderTrack   = Color3.fromRGB(212, 214, 228),
-        SliderThumb   = Color3.fromRGB(255, 255, 255),
+        SliderFill    = Color3.fromRGB( 56, 189, 248),
+        SliderTrack   = Color3.fromRGB( 32,  40,  60),
 
-        -- Icon
-        Icon          = Color3.fromRGB( 88,  92, 110),
-        IconActive    = Color3.fromRGB( 91, 107, 255),
+        Icon          = Color3.fromRGB(155, 170, 200),
+        IconActive    = Color3.fromRGB( 56, 189, 248),
 
-        -- Code block dots
-        CodeDotRed    = Color3.fromRGB(255,  95,  87),
-        CodeDotYellow = Color3.fromRGB(255, 189,  46),
-        CodeDotGreen  = Color3.fromRGB( 40, 201,  64),
+        ProgressBg    = Color3.fromRGB( 28,  34,  50),
+        ProgressFill  = Color3.fromRGB( 56, 189, 248),
 
-        -- Progress bar
-        ProgressBg    = Color3.fromRGB(216, 218, 232),
-        ProgressFill  = Color3.fromRGB( 91, 107, 255),
+        CPBackground  = Color3.fromRGB( 18,  22,  34),
+        CPBorder      = Color3.fromRGB( 42,  52,  76),
 
-        -- Colour-picker subpieces
-        CPBackground  = Color3.fromRGB(240, 241, 248),
-        CPBorder      = Color3.fromRGB(200, 204, 220),
-        CPHexBg       = Color3.fromRGB(222, 224, 236),
+        TooltipBg     = Color3.fromRGB(  4,   6,  12),
+        TooltipText   = Color3.fromRGB(235, 244, 255),
 
-        -- Tooltip
-        TooltipBg     = Color3.fromRGB( 24,  26,  36),
-        TooltipText   = Color3.fromRGB(245, 246, 250),
+        Success       = Color3.fromRGB( 52, 211, 153),
+        Warning       = Color3.fromRGB(250, 204,  21),
+        Danger        = Color3.fromRGB(248, 113, 113),
+    }),
 
-        -- Badge
-        BadgeBg       = Color3.fromRGB( 91, 107, 255),
-        BadgeText     = Color3.fromRGB(255, 255, 255),
+    Tokyo = _buildTheme({
+        -- Tokyo Night palette
+        Primary       = Color3.fromRGB( 26,  27,  38),
+        Secondary     = Color3.fromRGB( 31,  33,  46),
+        Component     = Color3.fromRGB( 41,  43,  60),
+        Interactable  = Color3.fromRGB( 54,  58,  82),
+        Elevated      = Color3.fromRGB( 46,  48,  68),
+        Sidebar       = Color3.fromRGB( 22,  23,  34),
 
-        -- Semantic
-        Success       = Color3.fromRGB( 22, 163, 100),
-        Warning       = Color3.fromRGB(220, 156,  20),
-        Danger        = Color3.fromRGB(225,  72,  72),
-        Info          = Color3.fromRGB( 56, 132, 235),
-    },
+        Title         = Color3.fromRGB(192, 202, 245),
+        Description   = Color3.fromRGB(130, 140, 178),
+        Tab           = Color3.fromRGB(154, 162, 198),
+        TabActive     = Color3.fromRGB(218, 226, 250),
+        SectionText   = Color3.fromRGB(138, 148, 184),
+
+        Accent        = Color3.fromRGB(187, 154, 247),
+        AccentLight   = Color3.fromRGB(208, 184, 250),
+        AccentDark    = Color3.fromRGB(154, 122, 220),
+
+        Outline       = Color3.fromRGB( 56,  60,  86),
+        Shadow        = Color3.fromRGB(  0,   0,   0),
+        Divider       = Color3.fromRGB( 42,  44,  62),
+
+        Hover         = Color3.fromRGB( 48,  52,  74),
+        Pressed       = Color3.fromRGB( 36,  38,  56),
+
+        ToggleOn      = Color3.fromRGB(187, 154, 247),
+        ToggleOff     = Color3.fromRGB( 62,  66,  92),
+
+        SliderFill    = Color3.fromRGB(187, 154, 247),
+        SliderTrack   = Color3.fromRGB( 56,  60,  86),
+
+        Icon          = Color3.fromRGB(154, 162, 198),
+        IconActive    = Color3.fromRGB(187, 154, 247),
+
+        ProgressBg    = Color3.fromRGB( 54,  58,  82),
+        ProgressFill  = Color3.fromRGB(187, 154, 247),
+
+        CPBackground  = Color3.fromRGB( 41,  43,  60),
+        CPBorder      = Color3.fromRGB( 68,  72, 100),
+
+        TooltipBg     = Color3.fromRGB( 18,  19,  28),
+        TooltipText   = Color3.fromRGB(192, 202, 245),
+
+        Success       = Color3.fromRGB(158, 206, 106),
+        Warning       = Color3.fromRGB(224, 175, 104),
+        Danger        = Color3.fromRGB(247, 118, 142),
+    }),
+
+    Mocha = _buildTheme({
+        -- Catppuccin Mocha palette
+        Primary       = Color3.fromRGB( 30,  30,  46),
+        Secondary     = Color3.fromRGB( 36,  39,  58),
+        Component     = Color3.fromRGB( 49,  50,  68),
+        Interactable  = Color3.fromRGB( 69,  71,  90),
+        Elevated      = Color3.fromRGB( 54,  56,  76),
+        Sidebar       = Color3.fromRGB( 24,  24,  37),
+
+        Title         = Color3.fromRGB(205, 214, 244),
+        Description   = Color3.fromRGB(147, 153, 178),
+        Tab           = Color3.fromRGB(166, 173, 200),
+        TabActive     = Color3.fromRGB(220, 224, 248),
+        SectionText   = Color3.fromRGB(154, 160, 188),
+
+        Accent        = Color3.fromRGB(203, 166, 247),
+        AccentLight   = Color3.fromRGB(220, 188, 250),
+        AccentDark    = Color3.fromRGB(170, 132, 220),
+
+        Outline       = Color3.fromRGB( 69,  71,  90),
+        Shadow        = Color3.fromRGB(  0,   0,   0),
+        Divider       = Color3.fromRGB( 49,  50,  68),
+
+        Hover         = Color3.fromRGB( 58,  60,  80),
+        Pressed       = Color3.fromRGB( 44,  46,  64),
+
+        ToggleOn      = Color3.fromRGB(203, 166, 247),
+        ToggleOff     = Color3.fromRGB( 88,  91, 112),
+
+        SliderFill    = Color3.fromRGB(203, 166, 247),
+        SliderTrack   = Color3.fromRGB( 69,  71,  90),
+
+        Icon          = Color3.fromRGB(166, 173, 200),
+        IconActive    = Color3.fromRGB(203, 166, 247),
+
+        ProgressBg    = Color3.fromRGB( 69,  71,  90),
+        ProgressFill  = Color3.fromRGB(203, 166, 247),
+
+        CPBackground  = Color3.fromRGB( 49,  50,  68),
+        CPBorder      = Color3.fromRGB( 88,  91, 112),
+
+        TooltipBg     = Color3.fromRGB( 17,  17,  27),
+        TooltipText   = Color3.fromRGB(205, 214, 244),
+
+        Success       = Color3.fromRGB(166, 227, 161),
+        Warning       = Color3.fromRGB(249, 226, 175),
+        Danger        = Color3.fromRGB(243, 139, 168),
+    }),
 }
 
 
@@ -332,8 +402,74 @@ end
 
 
 -- ═════════════════════════════════════════════════════════════
---  Easing Presets  (v4.0)
+--  State  (observable value, v5.0)
 -- ═════════════════════════════════════════════════════════════
+--[[
+    A State is an observable value. Multiple components can bind to
+    the same State and stay synchronised.
+
+        local power = State.new(50)
+        section:Slider{ State = power, Min = 0, Max = 100 }
+        section:Label { Text = "" }:Bind(power)
+        power:OnChanged(function(v) print("changed", v) end)
+        power:Set(80)    -- both slider AND label update
+
+    Internally just a table with `:Get / :Set / :OnChanged / :Destroy`,
+    plus a `_listeners` array. Equality check before notifying avoids
+    re-fires when the value didn't actually change.
+]]
+local State = {}
+State.__index = State
+
+function State.new(initial)
+    return setmetatable({
+        _value     = initial,
+        _listeners = {},
+        _destroyed = false,
+    }, State)
+end
+
+function State:Get() return self._value end
+
+function State:Set(value)
+    if self._destroyed then return end
+    if self._value == value then return end       -- no-op on same value
+    self._value = value
+    -- Snapshot to allow listeners to disconnect mid-fire
+    local snap = {}
+    local n = #self._listeners
+    for i = 1, n do snap[i] = self._listeners[i] end
+    for i = 1, n do
+        local fn = snap[i]
+        if fn then pcall(fn, value) end
+    end
+end
+
+--- Subscribe to changes. Returns a disconnect closure.
+function State:OnChanged(fn)
+    if type(fn) ~= "function" then return function() end end
+    table.insert(self._listeners, fn)
+    return function()
+        local i = table.find(self._listeners, fn)
+        if i then table.remove(self._listeners, i) end
+    end
+end
+
+--- Forcibly notify all listeners with the current value (no equality skip).
+function State:Notify()
+    if self._destroyed then return end
+    local v = self._value
+    for _, fn in ipairs(self._listeners) do pcall(fn, v) end
+end
+
+function State:Destroy()
+    self._destroyed = true
+    table.clear(self._listeners)
+end
+
+
+-- ═════════════════════════════════════════════════════════════
+--  Easing Presets
 --[[
     Modern motion language. Each preset picks a curve appropriate
     to the kind of motion:
@@ -349,11 +485,9 @@ local Ease = {
     Snap   = TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
     Soft   = TweenInfo.new(0.28, Enum.EasingStyle.Sine,  Enum.EasingDirection.InOut),
     Spring = TweenInfo.new(0.32, Enum.EasingStyle.Back,  Enum.EasingDirection.Out),
-    Bounce = TweenInfo.new(0.45, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
     Linear = TweenInfo.new(0.15, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
     -- Quick taps
     Press  = TweenInfo.new(0.10, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out),
-    Lift   = TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
 }
 
 
@@ -611,6 +745,9 @@ xpcall(
 
 local Blurs   = {}
 local Library = {}
+Library.State    = State
+Library.Themes   = Themes
+Library.Version  = "5.0"
 local _GlobalComponents = Screen:FindFirstChild("Components")
 
 
@@ -752,48 +889,6 @@ function Animations:Press(Component, Maid_)
 end
 
 --- Lift — subtle Y offset on hover (PC only). Hints clickability.
-function Animations:Lift(Component, Maid_, pixels)
-    if not Component or IsMobile then return end
-    pixels = pixels or 2
-    local origPos = Component.Position
-    local liftPos = UDim2.new(
-        origPos.X.Scale, origPos.X.Offset,
-        origPos.Y.Scale, origPos.Y.Offset - pixels
-    )
-
-    local c1 = Connect(Component.InputBegan, function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseMovement then
-            PresetTween(Component, "Lift", { Position = liftPos })
-        end
-    end)
-    local c2 = Connect(Component.InputEnded, function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseMovement then
-            PresetTween(Component, "Lift", { Position = origPos })
-        end
-    end)
-    if Maid_ then
-        Maid_:Add(c1)
-        Maid_:Add(c2)
-    end
-end
-
---- Pulse — UIStroke transparency oscillation for attention grab.
---- Lasts one cycle (~0.6 s). Useful for "your input is invalid" feedback.
-function Animations:Pulse(Component, color)
-    if not Component then return end
-    local stroke = Component:FindFirstChildOfClass("UIStroke")
-    if not stroke then
-        stroke = Instance.new("UIStroke", Component)
-        stroke.Thickness    = 1.5
-        stroke.Transparency = 1
-    end
-    stroke.Color = color or Color3.fromRGB(124, 92, 255)
-    Tween(stroke, 0.20, { Transparency = 0.2 }, Ease.Snap)
-    task.delay(0.30, function()
-        Tween(stroke, 0.35, { Transparency = 1 }, Ease.Soft)
-    end)
-end
-
 --- Ripple — material-style touch-ripple from press position.
 --- Cheap implementation: single circular Frame that scales out + fades.
 function Animations:Ripple(Component, position, color)
@@ -843,15 +938,7 @@ function Animations:Ripple(Component, position, color)
     end)
 end
 
---- Cross-fade — fade out then fade in (used for tab content swap).
-function Animations:CrossFade(Component, switchFn)
-    if not Component then if switchFn then switchFn() end; return end
-    Tween(Component, 0.10, { GroupTransparency = 1 }, Ease.Snap)
-    task.delay(0.10, function()
-        if switchFn then switchFn() end
-        Tween(Component, 0.18, { GroupTransparency = 0 }, Ease.Smooth)
-    end)
-end
+--- Cross-fade removed in v5 (was unused; tab switch fades inline).
 
 
 
@@ -922,9 +1009,7 @@ function Library:CreateWindow(Settings)
     -- ── Internal state ───────────────────────────────────────────────────
     local Options     = {}
     local Opened      = true
-    local Maximized   = false
     local BlurEnabled = false
-    local PreMaxPos   = nil
     local FAB         = nil   -- mobile floating-action-button
 
 
@@ -1158,21 +1243,6 @@ function Library:CreateWindow(Settings)
                     local n = Btn.Name
                     if n == "Close" then
                         ToggleWindow()
-                    elseif n == "Maximize" then
-                        if Maximized then
-                            Maximized = false
-                            Tween(Window, 0.14, {
-                                Size     = WinSetup.Size,
-                                Position = PreMaxPos,
-                            })
-                        else
-                            Maximized = true
-                            PreMaxPos = Window.Position
-                            Tween(Window, 0.14, {
-                                Size     = UDim2.fromScale(1, 1),
-                                Position = UDim2.fromScale(0.5, 0.5),
-                            })
-                        end
                     elseif n == "Minimize" then
                         Opened = false
                         Window.Visible = false
@@ -1476,51 +1546,6 @@ function Library:CreateWindow(Settings)
     end
 
 
-    -- ── Tab badge (NEW in v3.0) ──────────────────────────────────────────
-
-    function Options:AddTabBadge(TabName, Text)
-        local info = StoredInfo.Tabs[TabName]
-        if not info then warn("[UILib] AddTabBadge: unknown tab " .. tostring(TabName)); return end
-        local Tab = info.Button
-
-        local Existing = Tab:FindFirstChild("Badge")
-        if Existing then
-            if Text == nil or Text == "" then
-                Destroy(Existing); return
-            end
-            local L = Existing:FindFirstChildOfClass("TextLabel")
-            if L then L.Text = tostring(Text) end
-            return
-        end
-
-        if Text == nil or Text == "" then return end
-
-        local Badge = Instance.new("Frame")
-        SetProperty(Badge, {
-            Name             = "Badge",
-            Size             = UDim2.new(0, 22, 0, 18),
-            Position         = UDim2.new(1, -10, 0.5, 0),
-            AnchorPoint      = Vector2.new(1, 0.5),
-            BackgroundColor3 = Theme.BadgeBg,
-            BorderSizePixel  = 0,
-            ZIndex           = (Tab.ZIndex or 1) + 2,
-            Parent           = Tab,
-        })
-        Instance.new("UICorner", Badge).CornerRadius = UDim.new(1, 0)
-
-        local Lbl = Instance.new("TextLabel", Badge)
-        SetProperty(Lbl, {
-            Text                   = tostring(Text),
-            Font                   = Enum.Font.GothamBold,
-            TextSize               = 11,
-            TextColor3             = Theme.BadgeText,
-            BackgroundTransparency = 1,
-            Size                   = UDim2.fromScale(1, 1),
-            BorderSizePixel        = 0,
-            ZIndex                 = Badge.ZIndex + 1,
-        })
-    end
-
 
     -- ═══════════════════════════════════════════════════════════════════
     --  NOTIFICATIONS  (queued / stacked — portrait-aware)
@@ -1644,6 +1669,32 @@ function Library:CreateWindow(Settings)
         Flags[flag] = { Get = getFn, Set = setFn }
     end
 
+    -- v5: helper that wires a component controller to a State.
+    -- Two-way: component change → state:Set, state change → ctrl:Set.
+    -- Returns the State (creating a new one if Cfg.State was nil but
+    -- the caller wants binding-style access later).
+    local function BindState(Ctrl, state)
+        if not state then return nil end
+        if type(state) ~= "table" or not state.OnChanged then
+            warn("[StellarUI] State binding ignored — not a State object")
+            return nil
+        end
+        -- Push initial state value into the component
+        if state:Get() ~= nil then
+            pcall(Ctrl.Set, Ctrl, state:Get())
+        end
+        -- State → Component
+        local disc1 = state:OnChanged(function(v)
+            pcall(Ctrl.Set, Ctrl, v)
+        end)
+        -- Component → State
+        Ctrl:OnChanged(function(v)
+            if state._value ~= v then state:Set(v) end
+        end)
+        WinMaid:Add(disc1)
+        return state
+    end
+
 
     -- ═══════════════════════════════════════════════════════════════════
     --  SECTION  (with optional collapse — NEW in v3.0)
@@ -1661,37 +1712,14 @@ function Library:CreateWindow(Settings)
             Visible = true,
         })
 
-        -- Collapsible: returns a control that can hide/show subsequent siblings
-        -- whose Name starts with `__SectionChild__<Name>__`. To keep this
-        -- backward-compatible, only enabled when Cfg.Collapsible = true.
         local Ctrl = {}
-        Ctrl._collapsed = false
-        Ctrl._tag = "__SectionChild__" .. tostring(Cfg.Name) .. "__"
-
-        function Ctrl:Tag(component)
-            -- Mark a component as belonging to this section.
-            if component then component.Name = Ctrl._tag .. component.Name end
-        end
-
-        function Ctrl:SetCollapsed(state)
-            if Ctrl._collapsed == state then return end
-            Ctrl._collapsed = state
-            for _, child in next, Cfg.Tab:GetChildren() do
-                if child ~= Section and child.Name:find(Ctrl._tag, 1, true) == 1 then
-                    child.Visible = not state
-                end
-            end
-        end
-
-        function Ctrl:Destroy() Destroy(Section) end
-
-        if Cfg.Collapsible then
-            Section.AutoButtonColor = false
-            WinMaid:Add(Connect(Section.MouseButton1Click, function()
-                Ctrl:SetCollapsed(not Ctrl._collapsed)
-            end))
-        end
-
+        function Ctrl:SetTitle(t)            Section.Text = t end
+        function Ctrl:Set(t)                 Section.Text = t end
+        function Ctrl:Get()                  return Section.Text end
+        function Ctrl:OnChanged()            end
+        function Ctrl:SetDescription()       end
+        function Ctrl:SetVisible(v)          Section.Visible = v end
+        function Ctrl:Destroy()              Destroy(Section) end
         return Ctrl
     end
 
@@ -1828,11 +1856,6 @@ function Library:CreateWindow(Settings)
             local Value = not (On and On.Value)
             Set(Value)
             Buzz(0.3)
-            -- v4: ripple feedback originates from the switch centre
-            if Main then
-                local p = Main.AbsolutePosition + (Main.AbsoluteSize / 2)
-                Animations:Ripple(Main, p, Value and Theme.ToggleOn or Theme.Outline)
-            end
             if Cfg.Callback then task.spawn(Cfg.Callback, Value) end
         end))
 
@@ -1858,6 +1881,8 @@ function Library:CreateWindow(Settings)
         function Ctrl:Destroy()          Destroy(Toggle) end
 
         RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
+
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -1898,7 +1923,6 @@ function Library:CreateWindow(Settings)
 
         Animations:Hover(Button, false, WinMaid, Theme.Accent)
         Animations:Press(Button, WinMaid)
-        Animations:Lift(Button, WinMaid, 1)
         if Title then Title.Text = Cfg.Title       or "" end
         if Desc  then Desc.Text  = Cfg.Description or "" end
         SetProperty(Button, { Name = Cfg.Title or "Button", Parent = Cfg.Tab, Visible = true })
@@ -1997,6 +2021,8 @@ function Library:CreateWindow(Settings)
         function Ctrl:Destroy()          Destroy(Input) end
 
         RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
+
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -2167,6 +2193,8 @@ function Library:CreateWindow(Settings)
         end
 
         RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
+
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -2283,6 +2311,7 @@ function Library:CreateWindow(Settings)
                 end
             end
         )
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -2428,6 +2457,7 @@ function Library:CreateWindow(Settings)
                 end
             end
         )
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -2572,33 +2602,8 @@ function Library:CreateWindow(Settings)
         function Ctrl:Destroy()         Destroy(Dropdown) end
 
         RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
-        Components[#Components + 1] = Ctrl
-        return Ctrl
-    end
 
-
-    -- ═══════════════════════════════════════════════════════════════════
-    --  PARAGRAPH
-    -- ═══════════════════════════════════════════════════════════════════
-
-    function Options:AddParagraph(Cfg)
-        if not Cfg.Tab then warn("[UILib] AddParagraph: missing Cfg.Tab"); return end
-        local Para = _GlobalComponents and Clone(_GlobalComponents["Paragraph"])
-        if not Para then return end
-
-        local Title, Desc = Options:GetLabels(Para)
-        if Title then Title.Text = Cfg.Title       or "" end
-        if Desc  then Desc.Text  = Cfg.Description or "" end
-        SetProperty(Para, { Parent = Cfg.Tab, Visible = true })
-
-        local Ctrl = {}
-        function Ctrl:SetTitle(t)        if Title then Title.Text = t end end
-        function Ctrl:SetDescription(t)  if Desc  then Desc.Text  = t end end
-        function Ctrl:Set(t)             if Desc  then Desc.Text  = t end end
-        function Ctrl:Get()              return Desc and Desc.Text or "" end
-        function Ctrl:OnChanged()        end
-        function Ctrl:SetVisible(v)      Para.Visible = v end
-        function Ctrl:Destroy()          Destroy(Para) end
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -2702,6 +2707,8 @@ function Library:CreateWindow(Settings)
         function Ctrl:Destroy()          Destroy(Wrapper) end
 
         RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
+
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
@@ -2717,9 +2724,8 @@ function Library:CreateWindow(Settings)
         -- Larger on mobile for finger-precision SV picking
         local SV_H    = IsMobile and 160 or 110
         local HUE_H   = IsMobile and 22  or 14
-        local HEX_H   = IsMobile and 36  or 26
         local ROW_H   = IsMobile and 48  or 40
-        local PANEL_H = 16 + SV_H + 8 + HUE_H + 8 + HEX_H + 10
+        local PANEL_H = 16 + SV_H + 8 + HUE_H + 10
 
         local Row = Instance.new("TextButton")
         SetProperty(Row, {
@@ -2864,30 +2870,7 @@ function Library:CreateWindow(Settings)
         local HueStroke = Instance.new("UIStroke", HueThumb)
         HueStroke.Color = Color3.new(0.10, 0.10, 0.12); HueStroke.Thickness = 2
 
-        local HexRow = Instance.new("Frame", Picker)
-        SetProperty(HexRow, {
-            Name             = "HexRow",
-            Size             = UDim2.new(1, -16, 0, HEX_H),
-            Position         = UDim2.new(0, 8, 0, 8 + SV_H + 8 + HUE_H + 8),
-            BackgroundColor3 = Theme.CPHexBg,
-            BorderSizePixel  = 0,
-        })
-        Instance.new("UICorner", HexRow).CornerRadius = UDim.new(0, 6)
-
-        local HexInput = Instance.new("TextBox", HexRow)
-        SetProperty(HexInput, {
-            Name                   = "HexInput",
-            Text                   = "",
-            PlaceholderText        = "#RRGGBB",
-            Font                   = Enum.Font.Code,
-            TextSize               = IsMobile and 14 or 12,
-            TextColor3             = Theme.Title,
-            BackgroundTransparency = 1,
-            Size                   = UDim2.new(1, -12, 1, 0),
-            Position               = UDim2.new(0, 6, 0, 0),
-            ClearTextOnFocus       = false,
-            BorderSizePixel        = 0,
-        })
+        -- v5: HexInput removed — SV+Hue is enough for 99% of users
 
         local H, S, V = Color3.toHSV(Cfg.Default or Color3.fromRGB(108, 130, 255))
         local PickerOpen = false
@@ -2901,7 +2884,6 @@ function Library:CreateWindow(Settings)
             SVCanvas.BackgroundColor3 = Color3.fromHSV(H, 1, 1)
             SVThumb.Position  = UDim2.new(S, 0, 1 - V, 0)
             HueThumb.Position = UDim2.new(H, 0, 0.5, 0)
-            HexInput.Text     = Color3ToHex(c3)
             if emit ~= false then
                 if Cfg.Callback then task.spawn(Cfg.Callback, c3) end
                 for _, fn in ipairs(Listeners) do task.spawn(fn, c3) end
@@ -2989,16 +2971,6 @@ function Library:CreateWindow(Settings)
             end
         end))
 
-        WinMaid:Add(Connect(HexInput.FocusLost, function()
-            local c3 = HexToColor3(HexInput.Text)
-            if c3 then
-                H, S, V = Color3.toHSV(c3)
-                UpdateVisuals()
-            else
-                HexInput.Text = Color3ToHex(GetC3())
-            end
-        end))
-
         UpdateVisuals(false)
         Animations:Hover(Row, false, WinMaid, Theme.Accent)
 
@@ -3027,83 +2999,11 @@ function Library:CreateWindow(Settings)
                 end
             end
         )
+        BindState(Ctrl, Cfg.State)
         Components[#Components + 1] = Ctrl
         return Ctrl
     end
 
-
-    -- ═══════════════════════════════════════════════════════════════════
-    --  CODE BLOCK
-    -- ═══════════════════════════════════════════════════════════════════
-
-    function Options:AddCodeBlock(Cfg)
-        if not Cfg.Tab then warn("[UILib] AddCodeBlock: missing Cfg.Tab"); return end
-        local Template = _GlobalComponents and (_GlobalComponents:FindFirstChild("Code")
-                       or _GlobalComponents["Paragraph"])
-        if not Template then return end
-
-        local Block       = Clone(Template)
-        local Title, Desc = Options:GetLabels(Block)
-        local CopyBtn     = Block:FindFirstChild("Copy") or Block:FindFirstChild("CopyButton")
-
-        local Dots = Block:FindFirstChild("Dots")
-        if Dots then
-            local DR = Dots:FindFirstChild("Red")
-            local DY = Dots:FindFirstChild("Yellow")
-            local DG = Dots:FindFirstChild("Green")
-            if DR then DR.BackgroundColor3 = Theme.CodeDotRed    end
-            if DY then DY.BackgroundColor3 = Theme.CodeDotYellow end
-            if DG then DG.BackgroundColor3 = Theme.CodeDotGreen  end
-        end
-
-        if Title then Title.Text = Cfg.Title or "Code" end
-        if Desc  then Desc.Text  = Cfg.Code  or ""    end
-
-        local CurrentCode = Cfg.Code or ""
-
-        if CopyBtn then
-            local BtnLabel = CopyBtn:FindFirstChild("TextLabel") or CopyBtn:FindFirstChild("Label")
-
-            WinMaid:Add(Connect(CopyBtn.MouseButton1Click, function()
-                pcall(function()
-                    if setclipboard then setclipboard(CurrentCode) end
-                end)
-
-                if BtnLabel then
-                    local Original = BtnLabel.Text
-                    BtnLabel.Text  = "Copied!"
-                    Tween(CopyBtn, 0.1, {
-                        BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.25),
-                    })
-                    task.delay(1.5, function()
-                        BtnLabel.Text = Original
-                        Tween(CopyBtn, 0.15, { BackgroundColor3 = Theme.Component })
-                    end)
-                end
-                Buzz(0.25)
-
-                if Cfg.Callback then task.spawn(Cfg.Callback) end
-            end))
-
-            Animations:Hover(CopyBtn, false, WinMaid, Theme.Accent)
-        end
-
-        SetProperty(Block, { Parent = Cfg.Tab, Visible = true })
-
-        local Ctrl = {}
-        function Ctrl:Set(code)
-            CurrentCode = code
-            if Desc then Desc.Text = code end
-        end
-        function Ctrl:Get()              return CurrentCode end
-        function Ctrl:OnChanged()        end
-        function Ctrl:SetTitle(t)        if Title then Title.Text = t end end
-        function Ctrl:SetDescription(t)  if Desc  then Desc.Text  = t end end
-        function Ctrl:SetVisible(v)      Block.Visible = v end
-        function Ctrl:Destroy()          Destroy(Block) end
-        Components[#Components + 1] = Ctrl
-        return Ctrl
-    end
 
 
     -- ═══════════════════════════════════════════════════════════════════
@@ -3339,317 +3239,18 @@ function Library:CreateWindow(Settings)
 
 
     -- ═══════════════════════════════════════════════════════════════════
-    --  SEARCHABLE DROPDOWN  (NEW — dropdown + filter)
-    -- ═══════════════════════════════════════════════════════════════════
-
-    function Options:AddSearchableDropdown(Cfg)
-        if not Cfg.Tab then warn("[UILib] AddSearchableDropdown: missing Cfg.Tab"); return end
-        local Dropdown = _GlobalComponents and Clone(_GlobalComponents["Dropdown"])
-        if not Dropdown then return end
-
-        local Title, Desc  = Options:GetLabels(Dropdown)
-        local OptionsLabel = Dropdown:FindFirstChild("Main")
-            and Dropdown.Main:FindFirstChild("Options")
-
-        local CurrentValue = Cfg.Default
-        local Listeners    = {}
-
-        local function FindIndex(value)
-            for idx, opt in pairs(Cfg.Options or {}) do
-                if opt == value then return idx end
-            end
-        end
-
-        if OptionsLabel and CurrentValue ~= nil then
-            local idx = FindIndex(CurrentValue)
-            if idx then OptionsLabel.Text = tostring(idx) end
-        end
-
-        WinMaid:Add(Connect(Dropdown.MouseButton1Click, function()
-            local Example = Clone(Examples["DropdownExample"])
-            if not Example then return end
-
-            local PanelMaid = Maid.new()
-            local Top        = Example:FindFirstChild("Top")
-            local CloseBtns  = Top and Top:FindFirstChild("Buttons")
-            local ScrollFrame= Example:FindFirstChild("ScrollingFrame") or Example
-
-            -- Inject a search input bar at the top of the panel
-            local SearchBar = Instance.new("Frame")
-            SetProperty(SearchBar, {
-                Name             = "SearchBar",
-                Size             = UDim2.new(1, -16, 0, 32),
-                Position         = UDim2.new(0, 8, 0, Top and (Top.Size.Y.Offset + 8) or 8),
-                BackgroundColor3 = Theme.Interactable,
-                BorderSizePixel  = 0,
-                Parent           = Example,
-                ZIndex           = (ScrollFrame.ZIndex or 1) + 2,
-            })
-            Instance.new("UICorner", SearchBar).CornerRadius = UDim.new(0, 6)
-
-            local SearchBox = Instance.new("TextBox", SearchBar)
-            SetProperty(SearchBox, {
-                Text                   = "",
-                PlaceholderText        = "Search…",
-                Font                   = Enum.Font.GothamMedium,
-                TextSize               = 13,
-                TextColor3             = Theme.Title,
-                PlaceholderColor3      = Theme.Muted,
-                BackgroundTransparency = 1,
-                Size                   = UDim2.new(1, -16, 1, 0),
-                Position               = UDim2.new(0, 8, 0, 0),
-                ClearTextOnFocus       = false,
-                BorderSizePixel        = 0,
-                ZIndex                 = SearchBar.ZIndex + 1,
-            })
-
-            -- Push the scroll frame down so it doesn't overlap the search
-            if ScrollFrame ~= Example then
-                ScrollFrame.Position = UDim2.new(
-                    ScrollFrame.Position.X.Scale, ScrollFrame.Position.X.Offset,
-                    ScrollFrame.Position.Y.Scale, ScrollFrame.Position.Y.Offset + 40
-                )
-                ScrollFrame.Size = UDim2.new(
-                    ScrollFrame.Size.X.Scale, ScrollFrame.Size.X.Offset,
-                    ScrollFrame.Size.Y.Scale, ScrollFrame.Size.Y.Offset - 40
-                )
-            end
-
-            if BG then Tween(BG, 0.18, { BackgroundTransparency = 0.5 }) end
-            Example.Parent = Window
-            Animations:Open(Example, 0, Example.Size)
-
-            local function CloseDropdown()
-                if BG then Tween(BG, 0.18, { BackgroundTransparency = 1 }) end
-                Animations:Close(Example)
-                task.delay(0.3, function()
-                    PanelMaid:Destroy()
-                    Destroy(Example)
-                end)
-            end
-
-            if CloseBtns then
-                for _, Btn in next, CloseBtns:GetChildren() do
-                    if Btn:IsA("TextButton") then
-                        Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
-                        Animations:Press(Btn, PanelMaid)
-                        PanelMaid:Add(Connect(Btn.MouseButton1Click, CloseDropdown))
-                    end
-                end
-            end
-
-            -- Build option buttons and a lookup for filtering
-            local OptionBtns = {}
-            for Index, Option in next, Cfg.Options do
-                local Btn = Clone(Examples["DropdownButtonExample"])
-                if Btn then
-                    local BTitle, _ = Options:GetLabels(Btn)
-                    if BTitle then BTitle.Text = tostring(Index) end
-
-                    if CurrentValue == Option then
-                        Btn.BackgroundColor3 = Theme.Interactable
-                    end
-
-                    SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
-                    Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
-                    Animations:Press(Btn, PanelMaid)
-
-                    OptionBtns[#OptionBtns + 1] = { btn = Btn, key = tostring(Index):lower(), value = Option, index = Index }
-
-                    PanelMaid:Add(Connect(Btn.MouseButton1Click, function()
-                        CurrentValue = Option
-                        if OptionsLabel then OptionsLabel.Text = tostring(Index) end
-                        if Cfg.Callback then task.spawn(Cfg.Callback, Option, Index) end
-                        for _, fn in ipairs(Listeners) do task.spawn(fn, Option, Index) end
-                        Buzz(0.25)
-                        CloseDropdown()
-                    end))
-                end
-            end
-
-            -- Filter as user types
-            PanelMaid:Add(Connect(SearchBox:GetPropertyChangedSignal("Text"), function()
-                local q = SearchBox.Text:lower()
-                for _, info in ipairs(OptionBtns) do
-                    info.btn.Visible = (q == "" or info.key:find(q, 1, true) ~= nil)
-                end
-            end))
-        end))
-
-        Animations:Hover(Dropdown, false, WinMaid, Theme.Accent)
-        if Title then Title.Text = Cfg.Title       or "" end
-        if Desc  then Desc.Text  = Cfg.Description or "" end
-        SetProperty(Dropdown, { Name = Cfg.Title or "SearchableDropdown", Parent = Cfg.Tab, Visible = true })
-
-        if IsMobile then
-            Dropdown.Size = UDim2.new(Dropdown.Size.X.Scale, Dropdown.Size.X.Offset,
-                                      Dropdown.Size.Y.Scale, math.max(Dropdown.Size.Y.Offset, 56))
-        end
-
-        local Ctrl = {}
-        function Ctrl:Get()             return CurrentValue end
-        function Ctrl:Set(value)
-            local idx = FindIndex(value)
-            if idx then
-                CurrentValue = value
-                if OptionsLabel then OptionsLabel.Text = tostring(idx) end
-                for _, fn in ipairs(Listeners) do task.spawn(fn, value, idx) end
-            end
-        end
-        function Ctrl:OnChanged(fn)     Listeners[#Listeners + 1] = fn end
-        function Ctrl:SetTitle(t)       if Title then Title.Text = t end end
-        function Ctrl:SetDescription(t) if Desc  then Desc.Text  = t end end
-        function Ctrl:SetVisible(v)     Dropdown.Visible = v end
-        function Ctrl:Destroy()         Destroy(Dropdown) end
-
-        Components[#Components + 1] = Ctrl
-        return Ctrl
-    end
-
-
-    -- ═══════════════════════════════════════════════════════════════════
     --  THEME ENGINE
     -- ═══════════════════════════════════════════════════════════════════
-    --[[
-        SetTheme walks Screen:GetDescendants() once and applies the right
-        recolouring rule for each instance, matching either by Name or by
-        ClassName. New v3.0 components (Tooltip, Badge, Confirm) get their
-        own NameRules so a single SetTheme call covers everything.
-    ]]
-
-    local NameRules = {
-        ["Paragraph"]       = function(L) if L:IsA("TextButton") then L.BackgroundColor3 = Theme.Component end end,
-        ["Title"]           = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.Title          end end,
-        ["Description"]     = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.Description    end end,
-        ["Section"]         = function(L) if L:IsA("TextLabel")  then L.TextColor3 = Theme.SectionText    end end,
-        ["Options"]         = function(L)
-            if L:IsA("TextLabel") and L.Parent.Name == "Main" then L.TextColor3 = Theme.Title end
-        end,
-        ["Notification"]    = function(L)
-            if L:IsA("CanvasGroup") then
-                L.BackgroundColor3 = Theme.Primary
-                local S = L:FindFirstChildOfClass("UIStroke")
-                if S then S.Color = Theme.Outline end
-            end
-        end,
-        ["TextLabel"]       = function(L)
-            if L:IsA("TextLabel") and L.Parent:FindFirstChild("List") then L.TextColor3 = Theme.Tab end
-        end,
-        ["Main"]            = function(L)
-            if L:IsA("Frame") then
-                if L.Parent == Window then
-                    L.BackgroundColor3 = Theme.Secondary
-                elseif L.Parent:FindFirstChild("Value") then
-                    local V = L.Parent.Value
-                    if not V.Value then
-                        L.BackgroundColor3 = Theme.ToggleOff
-                        local C = L:FindFirstChild("Circle")
-                        if C then C.BackgroundColor3 = Theme.Primary end
-                    end
-                else
-                    L.BackgroundColor3 = Theme.Interactable
-                end
-            elseif L:FindFirstChild("Padding") then
-                L.TextColor3 = Theme.Title
-            end
-        end,
-        ["Amount"]          = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.Interactable end end,
-        ["Slide"]           = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.SliderTrack  end end,
-        ["Highlight"]       = function(L) if L:IsA("Frame") then L.BackgroundColor3 = Theme.SliderFill   end end,
-        ["Input"]           = function(L)
-            if L:IsA("TextLabel") then
-                L.TextColor3 = Theme.Title
-            elseif L:FindFirstChild("Labels") then
-                L.BackgroundColor3 = Theme.Component
-            elseif L:IsA("TextBox") and L.Parent.Name == "Main" then
-                L.TextColor3 = Theme.Title
-            end
-        end,
-        ["Outline"]         = function(L) if L:IsA("UIStroke") then L.Color = Theme.Outline end end,
-        ["DropdownExample"] = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.Secondary end end,
-        ["Underline"]       = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.Divider   end end,
-        ["Line"]            = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.Divider   end end,
-        ["Track"]           = function(L) if L:IsA("Frame")    then L.BackgroundColor3 = Theme.ProgressBg end end,
-        ["Fill"]            = function(L)
-            if L:IsA("Frame") and L.Parent and L.Parent.Name == "Track" then
-                L.BackgroundColor3 = Theme.ProgressFill
-            end
-        end,
-        ["Picker"]          = function(L)
-            if L:IsA("Frame") then
-                L.BackgroundColor3 = Theme.CPBackground
-                local S = L:FindFirstChildOfClass("UIStroke")
-                if S then S.Color = Theme.CPBorder end
-            end
-        end,
-        ["HexRow"]          = function(L) if L:IsA("Frame")   then L.BackgroundColor3 = Theme.CPHexBg end end,
-        ["HexInput"]        = function(L) if L:IsA("TextBox") then L.TextColor3       = Theme.Title  end end,
-        ["CheckMark"]       = function(L) if L:IsA("TextLabel") then L.TextColor3     = Theme.Accent end end,
-        ["Swatch"]          = function(L)
-            if L:IsA("Frame") then
-                local S = L:FindFirstChildOfClass("UIStroke")
-                if S then S.Color = Theme.Outline end
-            end
-        end,
-        -- v3.0 additions
-        ["Tooltip"]         = function(L)
-            if L:IsA("Frame") then
-                L.BackgroundColor3 = Theme.TooltipBg
-                local S = L:FindFirstChildOfClass("UIStroke")
-                if S then S.Color = Theme.Outline end
-                local Lbl = L:FindFirstChildOfClass("TextLabel")
-                if Lbl then Lbl.TextColor3 = Theme.TooltipText end
-            end
-        end,
-        ["Badge"]           = function(L)
-            if L:IsA("TextLabel") then
-                L.BackgroundColor3 = Theme.BadgeBg
-                L.TextColor3       = Theme.BadgeText
-            end
-        end,
-        ["ConfirmModal"]    = function(L)
-            if L:IsA("Frame") then
-                L.BackgroundColor3 = Theme.Primary
-                local S = L:FindFirstChildOfClass("UIStroke")
-                if S then S.Color = Theme.Outline end
-            end
-        end,
-        ["SearchBox"]       = function(L)
-            if L:IsA("TextBox") then
-                L.BackgroundColor3 = Theme.Component
-                L.TextColor3       = Theme.Title
-                L.PlaceholderColor3 = Theme.Description
-            end
-        end,
-    }
-
-    local ClassRules = {
-        ["ImageLabel"]     = function(L)
-            if L.Image ~= "rbxassetid://6644618143" then L.ImageColor3 = Theme.Icon end
-        end,
-        ["TextLabel"]      = function(L)
-            if L:FindFirstChild("Padding") then L.TextColor3 = Theme.Title end
-        end,
-        ["TextButton"]     = function(L)
-            if L:FindFirstChild("Labels") then L.BackgroundColor3 = Theme.Component end
-        end,
-        ["ScrollingFrame"] = function(L) L.ScrollBarImageColor3 = Theme.Interactable end,
-    }
-
-    -- v4: per-window descendant cache.
-    -- Old code re-walked Screen:GetDescendants() on every SetTheme — which
-    -- scans the FULL tree (including other windows AND the global Components
-    -- template folder). With 5 components per window × 3 windows that was
-    -- O(1500) nodes scanned for every theme toggle. We now keep a per-window
-    -- cache that includes only Window's descendants, refreshed lazily when
-    -- DescendantAdded fires.
-    local _themeCache         = nil
-    local _themeCacheDirty    = true
+    -- v4: per-window descendant cache for fast SetTheme. Walking the full
+    -- Screen:GetDescendants() on every theme change was O(other windows +
+    -- global Components template). The cache scopes the walk to JUST this
+    -- window and rebuilds only when descendants change.
+    local _themeCache      = nil
+    local _themeCacheDirty = true
 
     local function _rebuildThemeCache()
         local cache = {}
         local i = 0
-        -- Include Window itself
         i += 1; cache[i] = Window
         for _, D in next, Window:GetDescendants() do
             i += 1; cache[i] = D
@@ -3658,7 +3259,6 @@ function Library:CreateWindow(Settings)
         _themeCacheDirty = false
     end
 
-    -- Invalidate the cache whenever a new descendant appears
     WinMaid:Add(Connect(Window.DescendantAdded, function()
         _themeCacheDirty = true
     end))
@@ -3754,15 +3354,16 @@ function Library:CreateWindow(Settings)
             end
 
         elseif Setting == "Theme" then
-            local mode = (type(Value) == "string") and Value or nil
-            if mode and Themes[mode] then
+            -- v5: only preset names accepted (custom table mode removed)
+            local mode = tostring(Value)
+            if Themes[mode] then
                 Theme              = Themes[mode]
                 WinSetup.ThemeMode = mode
                 Options:SetTheme()
                 for _, fn in ipairs(ThemeCallbacks) do task.spawn(fn, mode, Theme) end
-            elseif type(Value) == "table" then
-                Options:SetTheme(Value)
-                for _, fn in ipairs(ThemeCallbacks) do task.spawn(fn, "Custom", Value) end
+            else
+                warn("[StellarUI] Unknown theme: " .. mode
+                     .. " (available: Default, Midnight, Tokyo, Mocha)")
             end
 
         elseif Setting == "Keybind" then
@@ -3927,12 +3528,593 @@ function Library:CreateWindow(Settings)
         end
     end
 
-    --- Returns the list of registered flag names (handy for debugging).
-    function Options:GetFlags()
-        local list = {}
-        for f in pairs(Flags) do list[#list + 1] = f end
-        table.sort(list)
-        return list
+
+    -- ═══════════════════════════════════════════════════════════════════
+    --  SET ACCENT  (v5.0)
+    -- ═══════════════════════════════════════════════════════════════════
+    --[[
+        Overrides the current theme's accent colour without changing any
+        other palette entry. Useful for letting end-users pick "their"
+        colour while keeping the rest of the dark theme intact.
+
+            window:SetAccent(Color3.fromRGB(255, 100, 100))
+            window:SetAccent("#FF6464")
+            window:SetAccent(nil)  -- reverts to the theme default
+    ]]
+
+    -- Snapshot the theme's original accent so SetAccent(nil) can restore.
+    local _accentSnapshot = {
+        Accent       = Theme.Accent,
+        AccentLight  = Theme.AccentLight,
+        AccentDark   = Theme.AccentDark,
+        ToggleOn     = Theme.ToggleOn,
+        SliderFill   = Theme.SliderFill,
+        ProgressFill = Theme.ProgressFill,
+        IconActive   = Theme.IconActive,
+        BadgeBg      = Theme.BadgeBg,
+        FocusRing    = Theme.FocusRing,
+    }
+
+    function Options:SetAccent(color)
+        -- Accept hex string, Color3, or nil (reset)
+        local target
+        if color == nil then
+            for k, v in pairs(_accentSnapshot) do Theme[k] = v end
+            Options:SetTheme()
+            return
+        end
+        if type(color) == "string" then
+            target = HexToColor3(color)
+            if not target then
+                warn("[StellarUI] SetAccent: invalid hex '" .. color .. "'")
+                return
+            end
+        elseif typeof(color) == "Color3" then
+            target = color
+        else
+            warn("[StellarUI] SetAccent: expected Color3 or hex string")
+            return
+        end
+
+        local light = target:Lerp(Color3.new(1, 1, 1), 0.18)
+        local dark  = target:Lerp(Color3.new(0, 0, 0), 0.18)
+
+        Theme.Accent       = target
+        Theme.AccentLight  = light
+        Theme.AccentDark   = dark
+        Theme.ToggleOn     = target
+        Theme.SliderFill   = target
+        Theme.ProgressFill = target
+        Theme.IconActive   = target
+        Theme.BadgeBg      = target
+        Theme.FocusRing    = target
+
+        Options:SetTheme()
+        for _, fn in ipairs(ThemeCallbacks) do task.spawn(fn, WinSetup.ThemeMode, Theme) end
+    end
+
+
+    -- ═══════════════════════════════════════════════════════════════════
+    --  DENSITY MODE  (v5.0)
+    -- ═══════════════════════════════════════════════════════════════════
+    --[[
+        Compact     — power-user density, tighter rows (~32 px each)
+        Comfortable — mobile-first / default, generous touch zones (~44 px+)
+
+        Adjusts all child component heights + the holder scroll padding.
+        Persists in WinSetup so it survives SetTheme.
+    ]]
+    WinSetup.Density = "Comfortable"
+
+    function Options:SetDensity(d)
+        d = (d == "Compact") and "Compact" or "Comfortable"
+        WinSetup.Density = d
+        local scale = (d == "Compact") and 0.82 or 1.0
+        -- Apply to all component rows we control (anything inside Holder
+        -- that has Size in Offset on the Y axis).
+        if not Holder then return end
+        for _, tab in next, Holder:GetChildren() do
+            if tab:IsA("CanvasGroup") then
+                local sf = tab:FindFirstChild("ScrollingFrame") or tab
+                for _, child in next, sf:GetChildren() do
+                    if child:IsA("GuiObject") and not child:IsA("UIListLayout")
+                       and not child:IsA("UIPadding") then
+                        local sz = child.Size
+                        local origAttr = child:GetAttribute("__OrigY")
+                        if not origAttr then
+                            origAttr = sz.Y.Offset
+                            child:SetAttribute("__OrigY", origAttr)
+                        end
+                        Tween(child, 0.18, {
+                            Size = UDim2.new(sz.X.Scale, sz.X.Offset,
+                                             sz.Y.Scale, math.floor(origAttr * scale)),
+                        }, Ease.Smooth)
+                    end
+                end
+            end
+        end
+    end
+
+
+    -- ═══════════════════════════════════════════════════════════════════
+    --  PROFILE SYSTEM  (v5.0)
+    -- ═══════════════════════════════════════════════════════════════════
+    --[[
+        Profiles let users save multiple named configs and switch between
+        them. Internally each profile is just a GetConfig() snapshot.
+        With executor `writefile`, profiles persist to disk.
+
+            window:SaveProfile("PvP")
+            window:LoadProfile("PvP")
+            window:ListProfiles()  → { "Default", "PvP", "Farm" }
+            window:DeleteProfile("Farm")
+
+        AUTO-SAVE: debounced 0.5 s after the last change.
+            window:SetAutoSave(true, "MyScript")   -- writes to "MyScript.json"
+    ]]
+    local Profiles       = { Default = {} }
+    local ActiveProfile  = "Default"
+    local AutoSaveOn     = false
+    local AutoSaveKey    = nil       -- filename without extension
+    local _autoSaveTimer = nil
+
+    local function _readProfilesFromDisk()
+        if not AutoSaveKey then return end
+        local ok, raw = pcall(function() return readfile(AutoSaveKey .. ".json") end)
+        if not ok or not raw then return end
+        local ok2, decoded = pcall(function() return Services.Http:JSONDecode(raw) end)
+        if ok2 and type(decoded) == "table" then
+            Profiles = decoded.profiles or { Default = {} }
+            ActiveProfile = decoded.active or "Default"
+        end
+    end
+
+    local function _writeProfilesToDisk()
+        if not AutoSaveKey then return end
+        local ok = pcall(function()
+            writefile(AutoSaveKey .. ".json", Services.Http:JSONEncode({
+                profiles = Profiles,
+                active   = ActiveProfile,
+            }))
+        end)
+        if not ok then warn("[StellarUI] Auto-save write failed") end
+    end
+
+    function Options:SaveProfile(name)
+        name = tostring(name or ActiveProfile)
+        Profiles[name] = Options:GetConfig()
+        ActiveProfile  = name
+        _writeProfilesToDisk()
+        return true
+    end
+
+    function Options:LoadProfile(name)
+        name = tostring(name)
+        local p = Profiles[name]
+        if not p then
+            warn("[StellarUI] Profile not found: " .. name)
+            return false
+        end
+        ActiveProfile = name
+        Options:LoadConfig(p)
+        _writeProfilesToDisk()
+        return true
+    end
+
+    function Options:DeleteProfile(name)
+        name = tostring(name)
+        if name == "Default" then
+            warn("[StellarUI] Cannot delete Default profile")
+            return false
+        end
+        Profiles[name] = nil
+        if ActiveProfile == name then ActiveProfile = "Default" end
+        _writeProfilesToDisk()
+        return true
+    end
+
+    function Options:ListProfiles()
+        local out = {}
+        for n in pairs(Profiles) do out[#out + 1] = n end
+        table.sort(out)
+        return out
+    end
+
+    function Options:GetActiveProfile() return ActiveProfile end
+
+    function Options:SetAutoSave(enabled, key)
+        AutoSaveOn  = enabled and true or false
+        AutoSaveKey = key
+        if AutoSaveOn then
+            _readProfilesFromDisk()
+            -- Apply the active profile on load
+            local p = Profiles[ActiveProfile]
+            if p then Options:LoadConfig(p) end
+        end
+    end
+
+    -- Hook auto-save: every flag change schedules a debounced write.
+    local _origRegisterFlag = RegisterFlag
+    RegisterFlag = function(flag, getFn, setFn)
+        if not flag then return end
+        Flags[flag] = {
+            Get = getFn,
+            Set = function(v)
+                setFn(v)
+                if AutoSaveOn then
+                    if _autoSaveTimer then task.cancel(_autoSaveTimer) end
+                    _autoSaveTimer = task.delay(0.5, function()
+                        Profiles[ActiveProfile] = Options:GetConfig()
+                        _writeProfilesToDisk()
+                    end)
+                end
+            end,
+        }
+    end
+
+
+    -- ═══════════════════════════════════════════════════════════════════
+    --  RADIO GROUP  (v5.0)
+    -- ═══════════════════════════════════════════════════════════════════
+    --[[
+        1-of-N picker, rendered as horizontal segmented buttons.
+        Better than Dropdown when there are 2-4 options.
+
+            section:RadioGroup{
+                Title   = "Mode",
+                Options = { "Off", "On", "Auto" },
+                Default = "Off",
+                Callback = function(value, index) ... end,
+            }
+    ]]
+    function Options:AddRadioGroup(Cfg)
+        if not Cfg.Tab then warn("[UILib] AddRadioGroup: missing Cfg.Tab"); return end
+        local opts = Cfg.Options or {}
+        if #opts < 2 then warn("[UILib] RadioGroup needs ≥2 options"); return end
+
+        local ROW_H = IsMobile and 56 or 44
+
+        local Wrapper = Instance.new("Frame")
+        SetProperty(Wrapper, {
+            Name             = "RadioGroup_" .. (Cfg.Title or ""),
+            Size             = UDim2.new(1, 0, 0, ROW_H),
+            BackgroundColor3 = Theme.Component,
+            BorderSizePixel  = 0,
+            Parent           = Cfg.Tab,
+            Visible          = true,
+        })
+        Instance.new("UICorner", Wrapper).CornerRadius = UDim.new(0, 8)
+        local Pad = Instance.new("UIPadding", Wrapper)
+        Pad.PaddingLeft  = UDim.new(0, 12)
+        Pad.PaddingRight = UDim.new(0, 12)
+
+        local TitleLbl
+        if Cfg.Title then
+            TitleLbl = Instance.new("TextLabel", Wrapper)
+            SetProperty(TitleLbl, {
+                Name                   = "Title",
+                Text                   = Cfg.Title,
+                Font                   = Enum.Font.GothamSemibold,
+                TextSize               = 13,
+                TextColor3             = Theme.Title,
+                BackgroundTransparency = 1,
+                TextXAlignment         = Enum.TextXAlignment.Left,
+                Size                   = UDim2.new(0.4, 0, 1, 0),
+                BorderSizePixel        = 0,
+            })
+        end
+
+        -- The segmented control itself sits on the right
+        local SegWidth = 240
+        local Seg = Instance.new("Frame", Wrapper)
+        SetProperty(Seg, {
+            Name             = "Segments",
+            Size             = UDim2.new(0, SegWidth, 0, ROW_H - 16),
+            Position         = UDim2.new(1, 0, 0.5, 0),
+            AnchorPoint      = Vector2.new(1, 0.5),
+            BackgroundColor3 = Theme.Interactable,
+            BorderSizePixel  = 0,
+        })
+        Instance.new("UICorner", Seg).CornerRadius = UDim.new(0, 7)
+
+        local Hl = Instance.new("UIListLayout", Seg)
+        Hl.FillDirection         = Enum.FillDirection.Horizontal
+        Hl.SortOrder             = Enum.SortOrder.LayoutOrder
+        Hl.HorizontalAlignment   = Enum.HorizontalAlignment.Center
+        Hl.VerticalAlignment     = Enum.VerticalAlignment.Center
+        Hl.Padding               = UDim.new(0, 2)
+        local SegPad = Instance.new("UIPadding", Seg)
+        SegPad.PaddingLeft  = UDim.new(0, 2)
+        SegPad.PaddingRight = UDim.new(0, 2)
+        SegPad.PaddingTop    = UDim.new(0, 2)
+        SegPad.PaddingBottom = UDim.new(0, 2)
+
+        local Current   = Cfg.Default or opts[1]
+        local Listeners = {}
+        local SegBtns   = {}
+
+        local function PaintSelection()
+            for _, info in ipairs(SegBtns) do
+                local selected = (info.value == Current)
+                Tween(info.btn, 0.18, {
+                    BackgroundColor3 = selected and Theme.Accent or Theme.Interactable,
+                }, Ease.Smooth)
+                if info.lbl then
+                    Tween(info.lbl, 0.18, {
+                        TextColor3 = selected and Color3.new(1,1,1) or Theme.Description,
+                    }, Ease.Smooth)
+                end
+            end
+        end
+
+        for i, opt in ipairs(opts) do
+            local btn = Instance.new("TextButton", Seg)
+            SetProperty(btn, {
+                Name                   = "Seg_" .. tostring(i),
+                Text                   = "",
+                AutoButtonColor        = false,
+                Size                   = UDim2.new(1 / #opts, -2, 1, 0),
+                BackgroundColor3       = Theme.Interactable,
+                BorderSizePixel        = 0,
+                LayoutOrder            = i,
+            })
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+            local lbl = Instance.new("TextLabel", btn)
+            SetProperty(lbl, {
+                Text                   = tostring(opt),
+                Font                   = Enum.Font.GothamSemibold,
+                TextSize               = 12,
+                TextColor3             = Theme.Description,
+                BackgroundTransparency = 1,
+                Size                   = UDim2.fromScale(1, 1),
+                BorderSizePixel        = 0,
+            })
+
+            SegBtns[#SegBtns + 1] = { btn = btn, lbl = lbl, value = opt, index = i }
+
+            WinMaid:Add(Connect(btn.MouseButton1Click, function()
+                if Current == opt then return end
+                Current = opt
+                PaintSelection()
+                Buzz(0.25)
+                if Cfg.Callback then task.spawn(Cfg.Callback, opt, i) end
+                for _, fn in ipairs(Listeners) do task.spawn(fn, opt, i) end
+            end))
+            Animations:Press(btn, WinMaid)
+        end
+
+        PaintSelection()
+
+        local Ctrl = {}
+        function Ctrl:Get()              return Current end
+        function Ctrl:Set(v)
+            for _, info in ipairs(SegBtns) do
+                if info.value == v then
+                    Current = v
+                    PaintSelection()
+                    for _, fn in ipairs(Listeners) do task.spawn(fn, v, info.index) end
+                    return
+                end
+            end
+        end
+        function Ctrl:OnChanged(fn)      Listeners[#Listeners + 1] = fn end
+        function Ctrl:SetTitle(t)        if TitleLbl then TitleLbl.Text = t end end
+        function Ctrl:SetDescription()   end
+        function Ctrl:SetVisible(v)      Wrapper.Visible = v end
+        function Ctrl:Destroy()          Destroy(Wrapper) end
+
+        RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
+        BindState(Ctrl, Cfg.State)
+        Components[#Components + 1] = Ctrl
+        return Ctrl
+    end
+    Options.AddSegmentedControl = Options.AddRadioGroup  -- alias
+
+
+    -- ═══════════════════════════════════════════════════════════════════
+    --  NUMBER STEPPER  (v5.0)
+    -- ═══════════════════════════════════════════════════════════════════
+    --[[
+        Compact +/- stepper for small integer ranges. Less space-greedy
+        than a slider when range is short (e.g. "Lives: 1-5").
+
+            section:Stepper{
+                Title   = "Lives",
+                Min = 1, Max = 5, Step = 1, Default = 3,
+                Callback = function(value) ... end,
+            }
+    ]]
+    function Options:AddStepper(Cfg)
+        if not Cfg.Tab then warn("[UILib] AddStepper: missing Cfg.Tab"); return end
+        local Min     = Cfg.Min or 0
+        local Max     = Cfg.Max or 10
+        local Step    = Cfg.Step or 1
+        local Current = math.clamp(Cfg.Default or Min, Min, Max)
+        local ROW_H   = IsMobile and 56 or 44
+
+        local Wrapper = Instance.new("Frame")
+        SetProperty(Wrapper, {
+            Name             = "Stepper_" .. (Cfg.Title or ""),
+            Size             = UDim2.new(1, 0, 0, ROW_H),
+            BackgroundColor3 = Theme.Component,
+            BorderSizePixel  = 0,
+            Parent           = Cfg.Tab,
+            Visible          = true,
+        })
+        Instance.new("UICorner", Wrapper).CornerRadius = UDim.new(0, 8)
+        local Pad = Instance.new("UIPadding", Wrapper)
+        Pad.PaddingLeft  = UDim.new(0, 12)
+        Pad.PaddingRight = UDim.new(0, 12)
+
+        local TitleLbl = Instance.new("TextLabel", Wrapper)
+        SetProperty(TitleLbl, {
+            Name                   = "Title",
+            Text                   = Cfg.Title or "Number",
+            Font                   = Enum.Font.GothamSemibold,
+            TextSize               = 13,
+            TextColor3             = Theme.Title,
+            BackgroundTransparency = 1,
+            TextXAlignment         = Enum.TextXAlignment.Left,
+            Size                   = UDim2.new(1, -140, 1, 0),
+            BorderSizePixel        = 0,
+        })
+
+        -- Stepper assembly on the right
+        local Box = Instance.new("Frame", Wrapper)
+        SetProperty(Box, {
+            Name             = "Box",
+            Size             = UDim2.new(0, 124, 0, ROW_H - 16),
+            Position         = UDim2.new(1, 0, 0.5, 0),
+            AnchorPoint      = Vector2.new(1, 0.5),
+            BackgroundColor3 = Theme.Interactable,
+            BorderSizePixel  = 0,
+        })
+        Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 7)
+
+        local function MakeBtn(text, posX, ax)
+            local b = Instance.new("TextButton", Box)
+            SetProperty(b, {
+                Text                   = text,
+                Font                   = Enum.Font.GothamBold,
+                TextSize               = 18,
+                TextColor3             = Theme.Title,
+                BackgroundTransparency = 1,
+                AutoButtonColor        = false,
+                Size                   = UDim2.new(0, 36, 1, 0),
+                Position               = UDim2.new(posX, 0, 0, 0),
+                AnchorPoint            = Vector2.new(ax, 0),
+                BorderSizePixel        = 0,
+            })
+            return b
+        end
+        local Minus = MakeBtn("−", 0, 0)
+        local Plus  = MakeBtn("+", 1, 1)
+
+        local NumLbl = Instance.new("TextLabel", Box)
+        SetProperty(NumLbl, {
+            Text                   = tostring(Current),
+            Font                   = Enum.Font.GothamBold,
+            TextSize               = 14,
+            TextColor3             = Theme.Title,
+            BackgroundTransparency = 1,
+            Size                   = UDim2.new(0, 52, 1, 0),
+            Position               = UDim2.fromScale(0.5, 0.5),
+            AnchorPoint            = Vector2.new(0.5, 0.5),
+            BorderSizePixel        = 0,
+        })
+
+        local Listeners = {}
+        local function SetValue(v, silent)
+            v = math.clamp(v, Min, Max)
+            if v == Current then return end
+            Current = v
+            NumLbl.Text = tostring(v)
+            if not silent then
+                if Cfg.Callback then task.spawn(Cfg.Callback, v) end
+                for _, fn in ipairs(Listeners) do task.spawn(fn, v) end
+            end
+            -- Visual feedback on edge-hit
+            local atMin = (v == Min)
+            local atMax = (v == Max)
+            Tween(Minus, 0.12, { TextTransparency = atMin and 0.6 or 0 }, Ease.Smooth)
+            Tween(Plus,  0.12, { TextTransparency = atMax and 0.6 or 0 }, Ease.Smooth)
+        end
+
+        WinMaid:Add(Connect(Minus.MouseButton1Click, function()
+            SetValue(Current - Step); Buzz(0.2)
+        end))
+        WinMaid:Add(Connect(Plus.MouseButton1Click, function()
+            SetValue(Current + Step); Buzz(0.2)
+        end))
+        Animations:Press(Minus, WinMaid)
+        Animations:Press(Plus,  WinMaid)
+        Animations:Hover(Wrapper, false, WinMaid, Theme.Accent)
+        SetValue(Current, true)
+
+        local Ctrl = {}
+        function Ctrl:Get()              return Current end
+        function Ctrl:Set(v)             SetValue(tonumber(v) or Min) end
+        function Ctrl:OnChanged(fn)      Listeners[#Listeners + 1] = fn end
+        function Ctrl:SetTitle(t)        TitleLbl.Text = t end
+        function Ctrl:SetDescription()   end
+        function Ctrl:SetRange(mn, mx)   Min = mn; Max = mx; SetValue(Current) end
+        function Ctrl:SetVisible(v)      Wrapper.Visible = v end
+        function Ctrl:Destroy()          Destroy(Wrapper) end
+
+        RegisterFlag(Cfg.Flag, function() return Ctrl:Get() end, function(v) Ctrl:Set(v) end)
+        BindState(Ctrl, Cfg.State)
+        Components[#Components + 1] = Ctrl
+        return Ctrl
+    end
+
+
+    -- ═══════════════════════════════════════════════════════════════════
+    --  BUILDER API  (v5.0)
+    -- ═══════════════════════════════════════════════════════════════════
+    --[[
+        Chainable, declarative API on top of the imperative Add* methods.
+
+            local window = Library:CreateWindow{ ... }
+            local main   = window:Tab{ Title = "Main", Icon = "rbxassetid://..." }
+            local combat = main:Section{ Title = "Combat" }
+            combat:Toggle{ Title = "Auto-aim",  Default = false }
+                  :Slider{ Title = "FOV", Min = 0, Max = 360, Default = 90 }
+                  :RadioGroup{ Title = "Mode", Options = {"Off","On","Auto"} }
+
+        Each method returns the SECTION (not the component) to enable
+        chaining. Use the underlying Options:AddXxx if you need the
+        controller object.
+    ]]
+
+    -- Window: build a tab object
+    function Options:Tab(Cfg)
+        Cfg = Cfg or {}
+        local tabFrame = Options:AddTab(Cfg)
+        if not tabFrame then return nil end
+
+        local TabAPI = {}
+        TabAPI._frame = tabFrame
+
+        function TabAPI:Section(secCfg)
+            secCfg = secCfg or {}
+            secCfg.Tab  = tabFrame
+            secCfg.Name = secCfg.Title or secCfg.Name or "Section"
+            local secCtrl = Options:AddSection(secCfg)
+
+            local SecAPI = {}
+            SecAPI._ctrl = secCtrl
+
+            -- Component shortcuts that auto-set Cfg.Tab
+            local function wrap(method)
+                return function(_, c)
+                    c = c or {}
+                    c.Tab = tabFrame
+                    Options[method](Options, c)
+                    return SecAPI
+                end
+            end
+            SecAPI.Toggle       = wrap("AddToggle")
+            SecAPI.Button       = wrap("AddButton")
+            SecAPI.Input        = wrap("AddInput")
+            SecAPI.Slider       = wrap("AddSlider")
+            SecAPI.Keybind      = wrap("AddKeybind")
+            SecAPI.Dropdown     = wrap("AddDropdown")
+            SecAPI.MultiDropdown= wrap("AddMultiDropdown")
+            SecAPI.ProgressBar  = wrap("AddProgressBar")
+            SecAPI.ColorPicker  = wrap("AddColorPicker")
+            SecAPI.RadioGroup   = wrap("AddRadioGroup")
+            SecAPI.Stepper      = wrap("AddStepper")
+            SecAPI.Label        = wrap("AddLabel")
+            SecAPI.Divider      = wrap("AddDivider")
+            -- Chain back to parent tab
+            SecAPI.Tab          = function() return TabAPI end
+            SecAPI._getSection  = function() return secCtrl end
+            return SecAPI
+        end
+
+        function TabAPI:Show() Options:SetTab(tabFrame.Name) end
+        return TabAPI
     end
 
 
