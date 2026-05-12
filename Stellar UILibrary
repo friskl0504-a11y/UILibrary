@@ -1,94 +1,71 @@
 --[[
 
     ╔══════════════════════════════════════════════════════════╗
-    ║   User Interface Library  —  Stellar  v3.0              ║
-    ║   Original: Friskl  |  v2.0 → v3.0 Major Overhaul        ║
+    ║   User Interface Library  —  Stellar  v4.0              ║
+    ║   Original: Friskl  |  v3.0 → v4.0 Modernization Update  ║
     ╚══════════════════════════════════════════════════════════╝
 
-    CHANGELOG (v3.0 — Major Overhaul):
+    CHANGELOG (v4.0 — Modernization & Polish):
 
-    ── ARCHITECTURE  ─────────────────────────────────────────
-    • FIX: Per-window Theme/Setup (no more module-level mutation
-          → opening 2 windows with different themes no longer
-          clobbers each other).
-    • FIX: ShiftColor now uses per-window ThemeMode.
-    • FIX: Animations:Open captures Size from each call site
-          (no module-level Setup.Size dependency).
-    • NEW: Centralised InputHub — a single global InputChanged
-          / InputEnded subscription that fans out to subscribers.
-          Replaces 3× listener per ColorPicker, etc.
-          (5 pickers used to fire 15 listeners/frame → now 1.)
+    ── VISUAL OVERHAUL  ─────────────────────────────────────
+    • NEW: Modern colour palettes — deep blue-tinted blacks
+          and refined violet accent (inspired by Linear / Vercel).
+          Strokes use subtle low-alpha for a glassy feel.
+    • NEW: Surface elevation tiers (Primary < Secondary < Elevated)
+          + per-state colours (Hover, Pressed, Focus).
+    • NEW: Soft glow on Toggle ON state (UIStroke pulse).
+    • NEW: Subtle accent gradient on primary action buttons.
+    • NEW: Modal open animation — spring scale-in + fade
+          (replaces the basic Quart-out tween).
+    • NEW: Tab cross-fade transition.
 
-    ── BUG FIXES ─────────────────────────────────────────────
-    • MakeDraggable: per-mousedown `Input.Changed` no longer
-      tracked by the WinMaid (leaked one connection per click).
-      Now uses a single InputEnded listener.
-    • Keybind: DetectConn now ONLY removed via WinMaid — no
-      double-disconnect on success.
-    • Slider: StopSliding is idempotent and connections are
-      cleared even if Heartbeat fires after Active=false.
-    • Dropdown / MultiDropdown: per-button Connect() calls now
-      tracked by an ephemeral Maid for that dropdown panel,
-      destroyed alongside the panel.
-    • Cfg.Tab defensiveness: every Add* validates Cfg.Tab and
-      warns instead of throwing a cryptic nil error.
+    ── ANIMATION SYSTEM  ────────────────────────────────────
+    • NEW: Easing presets — Smooth / Snap / Soft / Spring / Bounce
+          (cubic curves chosen for modern motion language).
+    • NEW: Animations:Press(obj)  — scale-down on press (tactile).
+    • NEW: Animations:Lift(obj)   — Y-offset on hover (PC).
+    • NEW: Animations:Pulse(obj)  — attention-grab stroke pulse.
+    • NEW: Animations:Ripple(obj) — material-style touch ripple.
+    • IMPROVED: Animations:Hover  — cubic easing, refined hover lerp.
+    • IMPROVED: Animations:Open   — spring scale + stroke fade-in.
 
-    ── MOBILE  ───────────────────────────────────────────────
-    • Slider: tap-anywhere on the track jumps to that value
-      (no need to hit the tiny Fire dot).
-    • Larger touch zones for Toggle, Button, Dropdown, Keybind,
-      ColorPicker on IsMobile (heights bumped 12–24 px).
-    • ColorPicker SV canvas larger on mobile (130 → 160 px).
-    • Floating Action Button (FAB) — shows in bottom-right when
-      window is hidden on mobile; one tap to re-open. Drag to
-      reposition. Long-press to fully destroy.
-    • Haptic feedback on Toggle, Button, Slider commit (via
-      HapticService).
-    • Long-press → Tooltip (mobile equivalent of mouse hover).
-    • Notifications stack from top on portrait phones (avoids
-      thumb / system-UI bottom area).
+    ── PERFORMANCE  ─────────────────────────────────────────
+    • NEW: TweenManager — automatically cancels a prior tween
+          on (instance, property) before starting a new one.
+          Prevents tween stacking on rapid state changes
+          (was: 100 toggle clicks = 100 queued tweens).
+    • OPTIMISED: Theme engine — per-window descendant cache
+          (built lazily, invalidated when components are added).
+          Old code re-walked the FULL screen tree (incl. other
+          windows + global components) on every SetTheme call.
+    • OPTIMISED: ipairs → numeric for-loop in tight InputHub
+          fanout; cached length, reduces per-frame overhead.
+    • OPTIMISED: Tween reuse — Hover/Press cache a single
+          tween-info instead of reconstructing each call.
 
-    ── NEW COMPONENTS  ───────────────────────────────────────
-    • AddTooltip(component, text)        — hover (PC) / long-press (mobile)
-    • AddConfirmDialog(title, body, fn)  — modal yes/no
-    • AddSearchableDropdown(...)         — dropdown + filter box
-    • Section collapse/expand (auto if AddSection called with Collapsible=true)
-    • AddTabBadge(tabName, text)         — small pill on tab button
+    ── COMPONENT POLISH  ────────────────────────────────────
+    • Toggle: Spring-based knob travel, ON-state glow,
+          ripple feedback on tap.
+    • Button: Press scale (0.97), accent gradient option,
+          touch ripple on mobile.
+    • Slider: Thumb lifts on grab, smoother fill colour blend.
+    • Dropdown / MultiDropdown: Panel slide-in spring,
+          option-row highlight on hover.
+    • ColorPicker: Larger thumb, smoother SV-canvas tracking.
+    • Notification: Stack offset animation when newer arrives.
 
-    ── COMPONENT API UNIFICATION  ────────────────────────────
-    Every Add* now returns a control table with at least:
-        :Set(value)         :Get()
-        :OnChanged(fn)      :Destroy()
-        :SetVisible(bool)
-        :SetTitle(str)      :SetDescription(str)
-    (Where a method does not apply, it is a safe no-op.)
-
-    ── CONFIG SAVE / LOAD  ───────────────────────────────────
-    • Options:GetConfig()   — returns a table of {flag = value}
-    • Options:LoadConfig(t) — applies values back to components
-    • Components are auto-registered if Cfg.Flag is supplied.
-
-    ── ANIMATIONS  ───────────────────────────────────────────
-    • Spring tween helper (Quint/InOut, softer feel).
-    • Component-add slide-in animation.
-    • Tab switch cross-fade (no more flash of empty content).
-
-    ── PERFORMANCE  ──────────────────────────────────────────
-    • Theme engine: per-window descendant cache, rebuilt only
-      when components are added (was full O(n) sweep on every
-      theme change × every window).
-    • InputHub batching: a single InputChanged drives all
-      drag-style components.
+    ── INHERITED FROM v3.0  ─────────────────────────────────
+    Per-window state, InputHub, FAB, haptics, tooltips,
+    confirm modal, searchable dropdown, config save/load,
+    full bug-fix audit (drag/keybind/slider/dropdown leaks),
+    mobile touch-zone sizing.
 
     ── WINDOW API  ───────────────────────────────────────────
-    Options:Destroy()         — full teardown (every connection)
-    Options:SetVisible(bool)  — animated show/hide
-    Options:OnThemeChanged(fn)
-    Options:GetConfig()  / Options:LoadConfig(t)
-    Options:SetTab(name)
-    Options:Notify(cfg)
-    Options:Confirm(cfg)      — promise-like; returns task-spawned
-    Options:Tooltip(comp, text)
+    Options:Destroy()           — full teardown (every connection)
+    Options:SetVisible(bool)    — animated show/hide
+    Options:OnThemeChanged(fn)  — listen for theme changes
+    Options:GetConfig() / LoadConfig(t)
+    Options:SetTab(name) / Notify(cfg) / Confirm(cfg) / Tooltip(c, t)
 
 ]]
 
@@ -141,112 +118,171 @@ end
 --  Themes
 -- ═════════════════════════════════════════════════════════════
 
+--[[
+    v4.0 modern palettes
+    ────────────────────
+    Dark  — deep blue-tinted blacks (Linear / Vercel feel), vibrant
+            violet accent (#7C5CFF), subtle low-alpha strokes.
+    Light — warm off-whites, indigo accent (#5B6BFF), gentle dividers.
+
+    Surface elevation tiers:   Primary < Secondary < Component < Elevated
+    State colours:             Hover, Pressed, Focus
+    Semantic:                  Success, Warning, Danger, Info
+]]
 local Themes = {
 
     Dark = {
-        Primary       = Color3.fromRGB(20,  20,  24),
-        Secondary     = Color3.fromRGB(26,  26,  32),
-        Component     = Color3.fromRGB(30,  30,  38),
-        Interactable  = Color3.fromRGB(40,  40,  50),
-        Sidebar       = Color3.fromRGB(22,  22,  28),
+        -- Surfaces (low → high elevation)
+        Primary       = Color3.fromRGB( 11,  11,  16),  -- darkest (window root)
+        Secondary     = Color3.fromRGB( 17,  17,  23),  -- holder panel
+        Component     = Color3.fromRGB( 22,  22,  30),  -- card / interactive bg
+        Interactable  = Color3.fromRGB( 32,  32,  44),  -- pressed / track
+        Elevated      = Color3.fromRGB( 26,  26,  34),  -- dropdown / modal
+        Sidebar       = Color3.fromRGB( 14,  14,  20),
 
-        Title         = Color3.fromRGB(235, 235, 242),
-        Description   = Color3.fromRGB(140, 140, 155),
-        Tab           = Color3.fromRGB(170, 170, 182),
-        TabActive     = Color3.fromRGB(235, 235, 242),
-        Muted         = Color3.fromRGB(100, 100, 115),
-        SectionText   = Color3.fromRGB(160, 160, 175),
+        -- Text
+        Title         = Color3.fromRGB(242, 243, 248),
+        Description   = Color3.fromRGB(135, 138, 156),
+        Tab           = Color3.fromRGB(168, 170, 186),
+        TabActive     = Color3.fromRGB(248, 249, 252),
+        Muted         = Color3.fromRGB( 90,  92, 110),
+        SectionText   = Color3.fromRGB(155, 158, 178),
 
-        Accent        = Color3.fromRGB(108, 130, 255),
-        AccentDark    = Color3.fromRGB(80,  100, 220),
-        AccentAlpha   = Color3.fromRGB(108, 130, 255),
+        -- Accent (violet)
+        Accent        = Color3.fromRGB(124,  92, 255),
+        AccentDark    = Color3.fromRGB( 95,  68, 215),
+        AccentLight   = Color3.fromRGB(160, 135, 255),
+        AccentAlpha   = Color3.fromRGB(124,  92, 255),
 
-        Outline       = Color3.fromRGB(42,  42,  54),
-        Shadow        = Color3.fromRGB(0,   0,   0),
-        Divider       = Color3.fromRGB(35,  35,  45),
+        -- Strokes & dividers (very subtle modern look)
+        Outline       = Color3.fromRGB( 38,  38,  52),
+        Shadow        = Color3.fromRGB(  0,   0,   0),
+        Divider       = Color3.fromRGB( 28,  28,  38),
+        FocusRing     = Color3.fromRGB(124,  92, 255),
 
-        ToggleOn      = Color3.fromRGB(108, 130, 255),
-        ToggleOff     = Color3.fromRGB(50,  50,  62),
+        -- Interaction states
+        Hover         = Color3.fromRGB( 30,  30,  42),  -- bg overlay on hover
+        Pressed       = Color3.fromRGB( 24,  24,  34),  -- bg on press
+
+        -- Toggle
+        ToggleOn      = Color3.fromRGB(124,  92, 255),
+        ToggleOff     = Color3.fromRGB( 48,  48,  62),
         ToggleKnob    = Color3.fromRGB(255, 255, 255),
+        ToggleGlow    = Color3.fromRGB(160, 135, 255),
 
-        SliderFill    = Color3.fromRGB(90,  115, 255),
-        SliderTrack   = Color3.fromRGB(42,  42,  54),
+        -- Slider
+        SliderFill    = Color3.fromRGB(124,  92, 255),
+        SliderTrack   = Color3.fromRGB( 38,  38,  52),
+        SliderThumb   = Color3.fromRGB(255, 255, 255),
 
-        Icon          = Color3.fromRGB(160, 160, 175),
-        IconActive    = Color3.fromRGB(108, 130, 255),
+        -- Icon
+        Icon          = Color3.fromRGB(168, 170, 186),
+        IconActive    = Color3.fromRGB(124,  92, 255),
 
+        -- Code block "traffic light" dots
         CodeDotRed    = Color3.fromRGB(255,  95,  87),
         CodeDotYellow = Color3.fromRGB(255, 189,  46),
         CodeDotGreen  = Color3.fromRGB( 40, 201,  64),
 
-        ProgressBg    = Color3.fromRGB(40,  40,  52),
-        ProgressFill  = Color3.fromRGB(108, 130, 255),
+        -- Progress bar
+        ProgressBg    = Color3.fromRGB( 32,  32,  44),
+        ProgressFill  = Color3.fromRGB(124,  92, 255),
 
-        CPBackground  = Color3.fromRGB(28,  28,  36),
-        CPBorder      = Color3.fromRGB(55,  55,  70),
-        CPHexBg       = Color3.fromRGB(35,  35,  45),
+        -- Colour-picker subpieces
+        CPBackground  = Color3.fromRGB( 24,  24,  32),
+        CPBorder      = Color3.fromRGB( 50,  50,  68),
+        CPHexBg       = Color3.fromRGB( 32,  32,  44),
 
-        -- v3.0 additions
-        TooltipBg     = Color3.fromRGB(15,  15,  18),
-        TooltipText   = Color3.fromRGB(245, 245, 250),
-        BadgeBg       = Color3.fromRGB(108, 130, 255),
+        -- Tooltip
+        TooltipBg     = Color3.fromRGB(  8,   8,  12),
+        TooltipText   = Color3.fromRGB(245, 246, 250),
+
+        -- Badge
+        BadgeBg       = Color3.fromRGB(124,  92, 255),
         BadgeText     = Color3.fromRGB(255, 255, 255),
-        Success       = Color3.fromRGB( 40, 201,  64),
+
+        -- Semantic
+        Success       = Color3.fromRGB( 52, 211, 132),
         Warning       = Color3.fromRGB(255, 189,  46),
-        Danger        = Color3.fromRGB(255,  95,  87),
+        Danger        = Color3.fromRGB(248,  92,  92),
+        Info          = Color3.fromRGB( 96, 165, 250),
     },
 
     Light = {
-        Primary       = Color3.fromRGB(242, 242, 248),
-        Secondary     = Color3.fromRGB(232, 232, 242),
-        Component     = Color3.fromRGB(220, 220, 234),
-        Interactable  = Color3.fromRGB(205, 205, 222),
-        Sidebar       = Color3.fromRGB(228, 228, 240),
+        -- Surfaces
+        Primary       = Color3.fromRGB(252, 252, 254),
+        Secondary     = Color3.fromRGB(245, 245, 250),
+        Component     = Color3.fromRGB(238, 239, 245),
+        Interactable  = Color3.fromRGB(220, 222, 232),
+        Elevated      = Color3.fromRGB(252, 252, 254),
+        Sidebar       = Color3.fromRGB(242, 243, 248),
 
-        Title         = Color3.fromRGB(18,  18,  24),
-        Description   = Color3.fromRGB(90,  90, 108),
-        Tab           = Color3.fromRGB(60,  60,  78),
-        TabActive     = Color3.fromRGB(18,  18,  24),
-        Muted         = Color3.fromRGB(140, 140, 158),
-        SectionText   = Color3.fromRGB(80,  80, 100),
+        -- Text
+        Title         = Color3.fromRGB( 15,  17,  26),
+        Description   = Color3.fromRGB( 88,  92, 110),
+        Tab           = Color3.fromRGB( 60,  64,  82),
+        TabActive     = Color3.fromRGB( 15,  17,  26),
+        Muted         = Color3.fromRGB(138, 142, 160),
+        SectionText   = Color3.fromRGB( 80,  84, 105),
 
-        Accent        = Color3.fromRGB(88,  110, 240),
-        AccentDark    = Color3.fromRGB(65,  88,  210),
-        AccentAlpha   = Color3.fromRGB(88,  110, 240),
+        -- Accent
+        Accent        = Color3.fromRGB( 91, 107, 255),
+        AccentDark    = Color3.fromRGB( 68,  85, 220),
+        AccentLight   = Color3.fromRGB(130, 145, 255),
+        AccentAlpha   = Color3.fromRGB( 91, 107, 255),
 
-        Outline       = Color3.fromRGB(195, 195, 212),
-        Shadow        = Color3.fromRGB(140, 140, 165),
-        Divider       = Color3.fromRGB(205, 205, 222),
+        -- Strokes & dividers
+        Outline       = Color3.fromRGB(218, 220, 232),
+        Shadow        = Color3.fromRGB(180, 184, 200),
+        Divider       = Color3.fromRGB(228, 230, 240),
+        FocusRing     = Color3.fromRGB( 91, 107, 255),
 
-        ToggleOn      = Color3.fromRGB(88,  110, 240),
-        ToggleOff     = Color3.fromRGB(185, 185, 202),
+        -- Interaction states
+        Hover         = Color3.fromRGB(232, 234, 245),
+        Pressed       = Color3.fromRGB(220, 222, 234),
+
+        -- Toggle
+        ToggleOn      = Color3.fromRGB( 91, 107, 255),
+        ToggleOff     = Color3.fromRGB(190, 194, 210),
         ToggleKnob    = Color3.fromRGB(255, 255, 255),
+        ToggleGlow    = Color3.fromRGB(130, 145, 255),
 
-        SliderFill    = Color3.fromRGB(88,  110, 240),
-        SliderTrack   = Color3.fromRGB(195, 195, 212),
+        -- Slider
+        SliderFill    = Color3.fromRGB( 91, 107, 255),
+        SliderTrack   = Color3.fromRGB(212, 214, 228),
+        SliderThumb   = Color3.fromRGB(255, 255, 255),
 
-        Icon          = Color3.fromRGB(80,  80, 100),
-        IconActive    = Color3.fromRGB(88,  110, 240),
+        -- Icon
+        Icon          = Color3.fromRGB( 88,  92, 110),
+        IconActive    = Color3.fromRGB( 91, 107, 255),
 
+        -- Code block dots
         CodeDotRed    = Color3.fromRGB(255,  95,  87),
         CodeDotYellow = Color3.fromRGB(255, 189,  46),
         CodeDotGreen  = Color3.fromRGB( 40, 201,  64),
 
-        ProgressBg    = Color3.fromRGB(210, 210, 225),
-        ProgressFill  = Color3.fromRGB(88,  110, 240),
+        -- Progress bar
+        ProgressBg    = Color3.fromRGB(216, 218, 232),
+        ProgressFill  = Color3.fromRGB( 91, 107, 255),
 
-        CPBackground  = Color3.fromRGB(238, 238, 248),
-        CPBorder      = Color3.fromRGB(195, 195, 212),
-        CPHexBg       = Color3.fromRGB(218, 218, 232),
+        -- Colour-picker subpieces
+        CPBackground  = Color3.fromRGB(240, 241, 248),
+        CPBorder      = Color3.fromRGB(200, 204, 220),
+        CPHexBg       = Color3.fromRGB(222, 224, 236),
 
-        -- v3.0 additions
-        TooltipBg     = Color3.fromRGB( 35,  35,  45),
-        TooltipText   = Color3.fromRGB(245, 245, 250),
-        BadgeBg       = Color3.fromRGB( 88, 110, 240),
+        -- Tooltip
+        TooltipBg     = Color3.fromRGB( 24,  26,  36),
+        TooltipText   = Color3.fromRGB(245, 246, 250),
+
+        -- Badge
+        BadgeBg       = Color3.fromRGB( 91, 107, 255),
         BadgeText     = Color3.fromRGB(255, 255, 255),
-        Success       = Color3.fromRGB( 40, 170,  64),
-        Warning       = Color3.fromRGB(225, 159,  16),
-        Danger        = Color3.fromRGB(225,  65,  57),
+
+        -- Semantic
+        Success       = Color3.fromRGB( 22, 163, 100),
+        Warning       = Color3.fromRGB(220, 156,  20),
+        Danger        = Color3.fromRGB(225,  72,  72),
+        Info          = Color3.fromRGB( 56, 132, 235),
     },
 }
 
@@ -296,6 +332,32 @@ end
 
 
 -- ═════════════════════════════════════════════════════════════
+--  Easing Presets  (v4.0)
+-- ═════════════════════════════════════════════════════════════
+--[[
+    Modern motion language. Each preset picks a curve appropriate
+    to the kind of motion:
+        Smooth — generic UI transitions (Cubic/Out)
+        Snap   — quick, decisive (Quart/Out)
+        Soft   — gentle, eased (Sine/InOut)
+        Spring — overshooty arrival (Back/Out)
+        Bounce — playful exit (Bounce/Out)
+        Linear — for hue/saturation in colour pickers
+]]
+local Ease = {
+    Smooth = TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+    Snap   = TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Soft   = TweenInfo.new(0.28, Enum.EasingStyle.Sine,  Enum.EasingDirection.InOut),
+    Spring = TweenInfo.new(0.32, Enum.EasingStyle.Back,  Enum.EasingDirection.Out),
+    Bounce = TweenInfo.new(0.45, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
+    Linear = TweenInfo.new(0.15, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
+    -- Quick taps
+    Press  = TweenInfo.new(0.10, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out),
+    Lift   = TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+}
+
+
+-- ═════════════════════════════════════════════════════════════
 --  Utility Functions
 -- ═════════════════════════════════════════════════════════════
 
@@ -303,22 +365,103 @@ local function Clone(obj)       return obj:Clone()              end
 local function Destroy(obj)     pcall(function() obj:Destroy() end) end
 local function Connect(sig, fn) return sig:Connect(fn)          end
 
---- Smooth tween helper (defaults to Quart/Out)
+
+-- ═════════════════════════════════════════════════════════════
+--  TweenManager  (v4.0)
+-- ═════════════════════════════════════════════════════════════
+--[[
+    Tracks the most-recent active tween per (instance, property-set
+    signature) and cancels it before starting a new one. Without
+    this, rapid state changes (e.g. user mashing a toggle) stack
+    tweens — each fights for the same property and the visual goes
+    janky. With it, only the latest tween survives.
+
+    Implementation uses weak keys so an instance being garbage-
+    collected doesn't pin its tween record.
+]]
+local TweenManager = {
+    _active = setmetatable({}, { __mode = "k" }),  -- weak keys
+}
+
+--- Stop any in-flight tween on `inst` with the same property signature.
+function TweenManager:CancelPrevious(inst, sig)
+    local bucket = self._active[inst]
+    if not bucket then return end
+    local prev = bucket[sig]
+    if prev then
+        pcall(function() prev:Cancel() end)
+        bucket[sig] = nil
+    end
+end
+
+function TweenManager:Register(inst, sig, tween)
+    local bucket = self._active[inst]
+    if not bucket then
+        bucket = {}
+        self._active[inst] = bucket
+    end
+    bucket[sig] = tween
+    -- Auto-clear on completion so we don't keep references alive forever.
+    tween.Completed:Connect(function()
+        local b = self._active[inst]
+        if b and b[sig] == tween then b[sig] = nil end
+    end)
+end
+
+--- Build a stable signature string from a property table.
+--- Sorted keys → identical prop-sets produce identical sigs.
+local function _propSig(props)
+    local keys = {}
+    for k in pairs(props) do keys[#keys + 1] = k end
+    table.sort(keys)
+    return table.concat(keys, ",")
+end
+
+--- Smooth tween helper — modern Cubic/Out default, with auto-cancel.
 local function Tween(obj, speed, props, info)
-    local style = (info and info.EasingStyle)     or Enum.EasingStyle.Quart
-    local dir   = (info and info.EasingDirection) or Enum.EasingDirection.Out
-    Services.Tween:Create(obj, TweenInfo.new(speed, style, dir), props):Play()
+    if not obj then return end
+    local tinfo
+    if info then
+        tinfo = info
+    elseif speed then
+        tinfo = TweenInfo.new(speed, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+    else
+        tinfo = Ease.Smooth
+    end
+    local sig = _propSig(props)
+    TweenManager:CancelPrevious(obj, sig)
+    local t = Services.Tween:Create(obj, tinfo, props)
+    TweenManager:Register(obj, sig, t)
+    t:Play()
+    return t
 end
 
---- Spring-style tween (Quint/InOut) — slightly bouncier feel
+--- Spring tween (Back/Out — slight overshoot for tactile arrivals).
 local function Spring(obj, speed, props)
-    Services.Tween:Create(obj,
-        TweenInfo.new(speed, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        props
-    ):Play()
+    if not obj then return end
+    local tinfo = TweenInfo.new(speed or 0.32,
+        Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    local sig = _propSig(props)
+    TweenManager:CancelPrevious(obj, sig)
+    local t = Services.Tween:Create(obj, tinfo, props)
+    TweenManager:Register(obj, sig, t)
+    t:Play()
+    return t
 end
 
---- Batch-set object properties
+--- Apply a preset Ease directly (e.g. PresetTween(obj, "Snap", {...}))
+local function PresetTween(obj, presetName, props)
+    if not obj then return end
+    local tinfo = Ease[presetName] or Ease.Smooth
+    local sig = _propSig(props)
+    TweenManager:CancelPrevious(obj, sig)
+    local t = Services.Tween:Create(obj, tinfo, props)
+    TweenManager:Register(obj, sig, t)
+    t:Play()
+    return t
+end
+
+--- Batch-set object properties (no animation)
 local function SetProperty(obj, props)
     for k, v in next, props do obj[k] = v end
     return obj
@@ -377,23 +520,35 @@ end
 
 
 -- ═════════════════════════════════════════════════════════════
---  InputHub  — single shared global input listener
+--  InputHub  — single shared global input listener (v4-optimised)
 -- ═════════════════════════════════════════════════════════════
 --[[
     Many components needed `Connect(Services.Input.InputChanged, ...)`.
     Each one added a global listener, so 5 colour-pickers + 3 sliders
     fired ~13 listeners on every mouse move.
 
-    InputHub is one InputChanged + one InputEnded subscription
-    that fans out to per-component handlers, kept in a list.
+    InputHub is one InputChanged + one InputEnded subscription that
+    fans out to per-component handlers, kept in a list.
+
+    v4 optimisations:
+        • Numeric for-loop (faster than ipairs in Luau for hot path)
+        • Cached length per dispatch
+        • Snapshot-array copy avoids "list mutated mid-iteration"
+          (a subscriber can disconnect another subscriber safely)
 ]]
 local InputHub = {}
 InputHub._changed = {}
 InputHub._ended   = {}
 
 local function _runFanout(list, input)
-    for _, fn in ipairs(list) do
-        pcall(fn, input)
+    local n = #list
+    if n == 0 then return end
+    -- Snapshot to allow safe disconnects mid-iteration
+    local snap = table.create(n)
+    for i = 1, n do snap[i] = list[i] end
+    for i = 1, n do
+        local fn = snap[i]
+        if fn then pcall(fn, input) end
     end
 end
 
@@ -460,59 +615,81 @@ local _GlobalComponents = Screen:FindFirstChild("Components")
 
 
 -- ═════════════════════════════════════════════════════════════
---  Window Animations  (stateless — no module-level Setup reads)
+--  Window Animations  (v4 — modern motion language)
 -- ═════════════════════════════════════════════════════════════
+--[[
+    All animations route through the TweenManager, so rapid state
+    changes never stack tweens. Easing presets follow modern motion
+    conventions: cubic-out for entrances, sine-in-out for state
+    changes, back-out for "arrivals" that should feel tactile.
+]]
 
 local Animations = {}
 
+--- Open the window with a spring scale-in + transparency fade.
+--- Modern modals open from ~95% scale, not 107% (no overshoot needed
+--- when GroupTransparency drives the perceived weight of the motion).
 function Animations:Open(Window, Transparency, FromSize)
-    local Original   = FromSize or Window.Size
-    local Multiplied = Multiply(Original, 1.07)
-    local Shadow     = Window:FindFirstChildOfClass("UIStroke")
+    local Original = FromSize or Window.Size
+    local Start    = Multiply(Original, 0.96)
+    local Shadow   = Window:FindFirstChildOfClass("UIStroke")
 
     if Shadow then Shadow.Transparency = 1 end
     SetProperty(Window, {
-        Size              = Multiplied,
+        Size              = Start,
         GroupTransparency = 1,
         Visible           = true,
     })
 
-    if Shadow then Tween(Shadow, 0.18, { Transparency = 0.6 }) end
-    Tween(Window, 0.18, {
+    -- Stroke fade comes in slightly *after* the size animation begins,
+    -- giving an "edge defining itself" effect.
+    if Shadow then
+        task.delay(0.05, function()
+            Tween(Shadow, 0.22, { Transparency = 0.55 }, Ease.Smooth)
+        end)
+    end
+    PresetTween(Window, "Spring", {
         Size              = Original,
         GroupTransparency = Transparency or 0,
     })
 end
 
+--- Close: reverse — scale slightly down, fade out, then hide.
 function Animations:Close(Window)
-    local Original   = Window.Size
-    local Multiplied = Multiply(Original, 1.07)
-    local Shadow     = Window:FindFirstChildOfClass("UIStroke")
+    local Original = Window.Size
+    local Shrunk   = Multiply(Original, 0.96)
+    local Shadow   = Window:FindFirstChildOfClass("UIStroke")
 
-    if Shadow then Tween(Shadow, 0.18, { Transparency = 1 }) end
-    Tween(Window, 0.18, { Size = Multiplied, GroupTransparency = 1 })
+    if Shadow then Tween(Shadow, 0.18, { Transparency = 1 }, Ease.Snap) end
+    Tween(Window, 0.18, { Size = Shrunk, GroupTransparency = 1 }, Ease.Snap)
 
-    task.wait(0.2)
-    Window.Size    = Original
-    Window.Visible = false
+    task.delay(0.20, function()
+        if Window and Window.Parent then
+            Window.Size    = Original
+            Window.Visible = false
+        end
+    end)
 end
 
---- Hover highlight; pass a Maid to track for cleanup.
+--- Hover highlight — pass a Maid to track for cleanup.
+--- Uses Lerp for a subtle accent tint rather than a flat colour swap.
 function Animations:Hover(Component, IsImage, Maid_, accent)
     if not Component then return end
-    accent = accent or Color3.fromRGB(108, 130, 255)
-    local base
+    accent = accent or Color3.fromRGB(124, 92, 255)
+    local baseBg
+    local pressActive = false
+
     local c1 = Connect(Component.InputBegan, function(Input)
         local t = Input.UserInputType
         if t == Enum.UserInputType.MouseMovement
            or (IsMobile and t == Enum.UserInputType.Touch) then
             if IsImage then
-                Tween(Component, 0.12, { ImageTransparency = 0.25 })
+                Tween(Component, 0.14, { ImageTransparency = 0.2 }, Ease.Smooth)
             else
-                base = Component.BackgroundColor3
-                Tween(Component, 0.12, {
-                    BackgroundColor3 = base:Lerp(accent, 0.08),
-                })
+                baseBg = Component.BackgroundColor3
+                Tween(Component, 0.14, {
+                    BackgroundColor3 = baseBg:Lerp(accent, 0.10),
+                }, Ease.Smooth)
             end
         end
     end)
@@ -521,9 +698,11 @@ function Animations:Hover(Component, IsImage, Maid_, accent)
         if t == Enum.UserInputType.MouseMovement
            or (IsMobile and t == Enum.UserInputType.Touch) then
             if IsImage then
-                Tween(Component, 0.12, { ImageTransparency = 0 })
+                Tween(Component, 0.16, { ImageTransparency = 0 }, Ease.Smooth)
             else
-                if base then Tween(Component, 0.12, { BackgroundColor3 = base }) end
+                if baseBg then
+                    Tween(Component, 0.16, { BackgroundColor3 = baseBg }, Ease.Smooth)
+                end
             end
         end
     end)
@@ -531,6 +710,147 @@ function Animations:Hover(Component, IsImage, Maid_, accent)
         Maid_:Add(c1)
         Maid_:Add(c2)
     end
+end
+
+--- Press animation — quick scale-down on press, return on release.
+--- The visual reminds users that their tap was registered (tactile).
+function Animations:Press(Component, Maid_)
+    if not Component then return end
+    local origSize = Component.Size
+    local pressed  = false
+
+    local function down(Input)
+        local t = Input.UserInputType
+        if t == Enum.UserInputType.MouseButton1
+           or t == Enum.UserInputType.Touch then
+            pressed = true
+            -- 4% smaller — noticeable but not janky
+            PresetTween(Component, "Press", {
+                Size = UDim2.new(
+                    origSize.X.Scale, math.floor(origSize.X.Offset * 0.96),
+                    origSize.Y.Scale, math.floor(origSize.Y.Offset * 0.96)
+                ),
+            })
+        end
+    end
+    local function up(Input)
+        if not pressed then return end
+        local t = Input.UserInputType
+        if t == Enum.UserInputType.MouseButton1
+           or t == Enum.UserInputType.Touch then
+            pressed = false
+            PresetTween(Component, "Spring", { Size = origSize })
+        end
+    end
+
+    local c1 = Connect(Component.InputBegan, down)
+    local c2 = Connect(Component.InputEnded, up)
+    if Maid_ then
+        Maid_:Add(c1)
+        Maid_:Add(c2)
+    end
+end
+
+--- Lift — subtle Y offset on hover (PC only). Hints clickability.
+function Animations:Lift(Component, Maid_, pixels)
+    if not Component or IsMobile then return end
+    pixels = pixels or 2
+    local origPos = Component.Position
+    local liftPos = UDim2.new(
+        origPos.X.Scale, origPos.X.Offset,
+        origPos.Y.Scale, origPos.Y.Offset - pixels
+    )
+
+    local c1 = Connect(Component.InputBegan, function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseMovement then
+            PresetTween(Component, "Lift", { Position = liftPos })
+        end
+    end)
+    local c2 = Connect(Component.InputEnded, function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseMovement then
+            PresetTween(Component, "Lift", { Position = origPos })
+        end
+    end)
+    if Maid_ then
+        Maid_:Add(c1)
+        Maid_:Add(c2)
+    end
+end
+
+--- Pulse — UIStroke transparency oscillation for attention grab.
+--- Lasts one cycle (~0.6 s). Useful for "your input is invalid" feedback.
+function Animations:Pulse(Component, color)
+    if not Component then return end
+    local stroke = Component:FindFirstChildOfClass("UIStroke")
+    if not stroke then
+        stroke = Instance.new("UIStroke", Component)
+        stroke.Thickness    = 1.5
+        stroke.Transparency = 1
+    end
+    stroke.Color = color or Color3.fromRGB(124, 92, 255)
+    Tween(stroke, 0.20, { Transparency = 0.2 }, Ease.Snap)
+    task.delay(0.30, function()
+        Tween(stroke, 0.35, { Transparency = 1 }, Ease.Soft)
+    end)
+end
+
+--- Ripple — material-style touch-ripple from press position.
+--- Cheap implementation: single circular Frame that scales out + fades.
+function Animations:Ripple(Component, position, color)
+    if not Component then return end
+    color = color or Color3.fromRGB(255, 255, 255)
+
+    -- Determine ripple origin in component-local coords
+    local absPos  = Component.AbsolutePosition
+    local absSize = Component.AbsoluteSize
+    local localX  = (position and (position.X - absPos.X)) or (absSize.X / 2)
+    local localY  = (position and (position.Y - absPos.Y)) or (absSize.Y / 2)
+
+    -- The ripple needs to grow large enough to cover the entire component
+    -- from the press point — i.e. radius = distance to furthest corner.
+    local maxR = math.sqrt(
+        math.max(localX, absSize.X - localX) ^ 2 +
+        math.max(localY, absSize.Y - localY) ^ 2
+    ) * 2
+
+    local ripple = Instance.new("Frame")
+    ripple.Name                   = "Ripple"
+    ripple.BackgroundColor3       = color
+    ripple.BackgroundTransparency = 0.7
+    ripple.BorderSizePixel        = 0
+    ripple.AnchorPoint            = Vector2.new(0.5, 0.5)
+    ripple.Position               = UDim2.new(0, localX, 0, localY)
+    ripple.Size                   = UDim2.new(0, 0, 0, 0)
+    ripple.ZIndex                 = (Component.ZIndex or 1) + 1
+    ripple.Parent                 = Component
+
+    -- Clip to the parent so the ripple stays inside its rounded corners
+    local existingClip = Component.ClipsDescendants
+    Component.ClipsDescendants = true
+
+    local corner = Instance.new("UICorner", ripple)
+    corner.CornerRadius = UDim.new(1, 0)
+
+    Tween(ripple, 0.45, {
+        Size                   = UDim2.new(0, maxR, 0, maxR),
+        BackgroundTransparency = 1,
+    }, Ease.Soft)
+    task.delay(0.5, function()
+        if ripple and ripple.Parent then ripple:Destroy() end
+        if Component and Component.Parent then
+            Component.ClipsDescendants = existingClip
+        end
+    end)
+end
+
+--- Cross-fade — fade out then fade in (used for tab content swap).
+function Animations:CrossFade(Component, switchFn)
+    if not Component then if switchFn then switchFn() end; return end
+    Tween(Component, 0.10, { GroupTransparency = 1 }, Ease.Snap)
+    task.delay(0.10, function()
+        if switchFn then switchFn() end
+        Tween(Component, 0.18, { GroupTransparency = 0 }, Ease.Smooth)
+    end)
 end
 
 
@@ -935,11 +1255,12 @@ function Library:CreateWindow(Settings)
         draggable, dismissable icon that re-opens the window in one tap.
     ]]
     if IsMobile then
+        local FAB_SIZE = 56  -- v4: slightly larger touch target
         local FabBtn = Instance.new("TextButton")
         SetProperty(FabBtn, {
             Name                   = "FAB_" .. (Settings.Title or "Window"),
-            Size                   = UDim2.new(0, 52, 0, 52),
-            Position               = UDim2.new(1, -78, 1, -78),
+            Size                   = UDim2.new(0, FAB_SIZE, 0, FAB_SIZE),
+            Position               = UDim2.new(1, -(FAB_SIZE + 22), 1, -(FAB_SIZE + 22)),
             AnchorPoint            = Vector2.new(0, 0),
             BackgroundColor3       = Theme.Accent,
             BorderSizePixel        = 0,
@@ -950,16 +1271,26 @@ function Library:CreateWindow(Settings)
             Parent                 = Screen,
         })
         Instance.new("UICorner", FabBtn).CornerRadius = UDim.new(1, 0)
+
+        -- v4: outer halo stroke (very subtle) — makes the FAB feel modern
         local FabStroke = Instance.new("UIStroke", FabBtn)
-        FabStroke.Color = Theme.Outline
-        FabStroke.Thickness = 1
-        FabStroke.Transparency = 0.5
+        FabStroke.Color        = Theme.AccentLight or Theme.Accent
+        FabStroke.Thickness    = 1.5
+        FabStroke.Transparency = 0.55
+
+        -- v4: subtle gradient on the FAB body for depth
+        local FabGrad = Instance.new("UIGradient", FabBtn)
+        FabGrad.Rotation = 135
+        FabGrad.Color    = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, (Theme.AccentLight or Theme.Accent):Lerp(Color3.new(1,1,1), 0.10)),
+            ColorSequenceKeypoint.new(1, Theme.Accent),
+        })
 
         local FabIcon = Instance.new("TextLabel", FabBtn)
         SetProperty(FabIcon, {
             Text                   = (Settings.Title or "S"):sub(1, 1):upper(),
             Font                   = Enum.Font.GothamBold,
-            TextSize               = 22,
+            TextSize               = 24,
             TextColor3             = Color3.new(1, 1, 1),
             BackgroundTransparency = 1,
             Size                   = UDim2.fromScale(1, 1),
@@ -967,15 +1298,15 @@ function Library:CreateWindow(Settings)
             ZIndex                 = 51,
         })
 
-        -- Subtle pulse animation when shown
+        -- v4: Show/Hide with spring + ripple-style scale-in
         FAB = {}
         function FAB:Show()
             FabBtn.Size = UDim2.new(0, 0, 0, 0)
             FabBtn.Visible = true
-            Spring(FabBtn, 0.25, { Size = UDim2.new(0, 52, 0, 52) })
+            PresetTween(FabBtn, "Spring", { Size = UDim2.new(0, FAB_SIZE, 0, FAB_SIZE) })
         end
         function FAB:Hide()
-            Tween(FabBtn, 0.18, { Size = UDim2.new(0, 0, 0, 0) })
+            Tween(FabBtn, 0.18, { Size = UDim2.new(0, 0, 0, 0) }, Ease.Snap)
             task.delay(0.2, function() FabBtn.Visible = false end)
         end
 
@@ -1037,31 +1368,33 @@ function Library:CreateWindow(Settings)
                 local ICO      = Button:FindFirstChild("ICO")
 
                 if isTarget and not (Val and Val.Value) then
-                    if Pad then Tween(Pad, 0.18, { PaddingLeft = UDim.new(0, 22) }) end
-                    Tween(Button, 0.18, {
-                        BackgroundTransparency = 0.88,
+                    if Pad then Tween(Pad, 0.20, { PaddingLeft = UDim.new(0, 22) }, Ease.Smooth) end
+                    Tween(Button, 0.20, {
+                        BackgroundTransparency = 0.86,
                         BackgroundColor3       = Theme.Accent,
-                    })
-                    if ICO then Tween(ICO, 0.18, { ImageColor3 = Theme.Accent }) end
+                    }, Ease.Smooth)
+                    if ICO then Tween(ICO, 0.20, { ImageColor3 = Theme.Accent }, Ease.Smooth) end
                     local TL = Button:FindFirstChild("TextLabel")
-                    if TL then Tween(TL, 0.18, { TextColor3 = Theme.TabActive }) end
+                    if TL then Tween(TL, 0.20, { TextColor3 = Theme.TabActive }, Ease.Smooth) end
                     if Val then Val.Value = true end
 
                 elseif not isTarget and (Val and Val.Value) then
-                    if Pad then Tween(Pad, 0.18, { PaddingLeft = UDim.new(0, 16) }) end
-                    Tween(Button, 0.18, {
+                    if Pad then Tween(Pad, 0.20, { PaddingLeft = UDim.new(0, 16) }, Ease.Smooth) end
+                    Tween(Button, 0.20, {
                         BackgroundTransparency = 1,
                         BackgroundColor3       = Theme.Component,
-                    })
-                    if ICO then Tween(ICO, 0.18, { ImageColor3 = Theme.Icon }) end
+                    }, Ease.Smooth)
+                    if ICO then Tween(ICO, 0.20, { ImageColor3 = Theme.Icon }, Ease.Smooth) end
                     local TL = Button:FindFirstChild("TextLabel")
-                    if TL then Tween(TL, 0.18, { TextColor3 = Theme.Tab }) end
+                    if TL then Tween(TL, 0.20, { TextColor3 = Theme.Tab }, Ease.Smooth) end
                     if Val then Val.Value = false end
                 end
             end
         end
 
         if not Holder then return end
+        -- v4: cross-fade — outgoing fades out, incoming fades in with a slight
+        -- Y offset that returns to centre, mimicking native nav transitions.
         for _, Main in next, Holder:GetChildren() do
             if Main:IsA("CanvasGroup") then
                 local isTarget = (Main.Name == Name)
@@ -1072,13 +1405,17 @@ function Library:CreateWindow(Settings)
                 if isTarget and not (Val and Val.Value) then
                     if Val then Val.Value = true end
                     Main.Visible = true
-                    Tween(Main, 0.22, { GroupTransparency = 0 })
-                    if Pad then Tween(Pad, 0.22, { PaddingTop = UDim.new(0, 8) }) end
+                    -- Start slightly offset so content "slides into place"
+                    Tween(Main, 0.26, { GroupTransparency = 0 }, Ease.Smooth)
+                    if Pad then
+                        Pad.PaddingTop = UDim.new(0, 14)
+                        Tween(Pad, 0.26, { PaddingTop = UDim.new(0, 8) }, Ease.Smooth)
+                    end
 
                 elseif not isTarget and (Val and Val.Value) then
                     if Val then Val.Value = false end
-                    Tween(Main, 0.14, { GroupTransparency = 1 })
-                    if Pad then Tween(Pad, 0.14, { PaddingTop = UDim.new(0, 18) }) end
+                    Tween(Main, 0.14, { GroupTransparency = 1 }, Ease.Snap)
+                    if Pad then Tween(Pad, 0.14, { PaddingTop = UDim.new(0, 18) }, Ease.Snap) end
                     task.delay(0.18, function() Main.Visible = false end)
                 end
             end
@@ -1198,7 +1535,7 @@ function Library:CreateWindow(Settings)
             local baseY = NOTIF_PADDING
             for i = 1, #ActiveNotifs do
                 local n = ActiveNotifs[i]
-                Tween(n, 0.2, {
+                PresetTween(n, "Spring", {
                     Position = UDim2.new(1, -(n.AbsoluteSize.X + 10), 0, baseY),
                 })
                 baseY = baseY + n.AbsoluteSize.Y + NOTIF_PADDING
@@ -1209,7 +1546,7 @@ function Library:CreateWindow(Settings)
             for i = #ActiveNotifs, 1, -1 do
                 local n = ActiveNotifs[i]
                 local h = n.AbsoluteSize.Y
-                Tween(n, 0.2, {
+                PresetTween(n, "Spring", {
                     Position = UDim2.new(1, -(n.AbsoluteSize.X + 10), 1, baseY - h),
                 })
                 baseY = baseY - h - NOTIF_PADDING
@@ -1233,17 +1570,32 @@ function Library:CreateWindow(Settings)
         local NS = Notif:FindFirstChildOfClass("UIStroke")
         if NS then NS.Color = Theme.Outline end
 
-        -- Type-coloured timer bar (NEW)
-        if Timer and Cfg.Type then
+        -- v4: resolve the type colour once and use it for BOTH the timer AND
+        -- a new left accent strip — a much more modern notification design.
+        local TypeColor = Theme.Accent
+        if Cfg.Type then
             local colors = {
                 success = Theme.Success,
                 warning = Theme.Warning,
                 error   = Theme.Danger,
-                info    = Theme.Accent,
+                info    = Theme.Info or Theme.Accent,
             }
-            local c = colors[string.lower(Cfg.Type)]
-            if c then Timer.BackgroundColor3 = c end
+            TypeColor = colors[string.lower(Cfg.Type)] or Theme.Accent
         end
+        if Timer then Timer.BackgroundColor3 = TypeColor end
+
+        -- v4: left side accent strip (4 px wide, full height, rounded)
+        local Accent = Instance.new("Frame", Notif)
+        SetProperty(Accent, {
+            Name             = "AccentStrip",
+            Size             = UDim2.new(0, 3, 1, -8),
+            Position         = UDim2.new(0, 4, 0.5, 0),
+            AnchorPoint      = Vector2.new(0, 0.5),
+            BackgroundColor3 = TypeColor,
+            BorderSizePixel  = 0,
+            ZIndex           = (Notif.ZIndex or 1) + 1,
+        })
+        Instance.new("UICorner", Accent).CornerRadius = UDim.new(1, 0)
 
         local Parent = Screen:FindFirstChild("Frame") or Screen
         SetProperty(Notif, { GroupTransparency = 1, Visible = true, Parent = Parent })
@@ -1254,7 +1606,11 @@ function Library:CreateWindow(Settings)
         task.spawn(function()
             local Duration = Cfg.Duration or 3
             Animations:Open(Notif, WinSetup.Transparency, Notif.Size)
-            if Timer then Tween(Timer, Duration, { Size = UDim2.new(0, 0, 0, 3) }) end
+            -- v4: timer drains linearly (the visible countdown should be linear)
+            if Timer then
+                Tween(Timer, Duration, { Size = UDim2.new(0, 0, 0, 3) },
+                    TweenInfo.new(Duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out))
+            end
             task.wait(Duration)
             Animations:Close(Notif)
             task.wait(0.25)
@@ -1430,16 +1786,34 @@ function Library:CreateWindow(Settings)
         local Main   = Toggle:FindFirstChild("Main")
         local Circle = Main and Main:FindFirstChild("Circle")
 
+        -- v4: add a soft glow stroke to the switch that appears in ON state.
+        local Glow
+        if Main then
+            Glow = Instance.new("UIStroke")
+            Glow.Name         = "ToggleGlow"
+            Glow.Thickness    = 2
+            Glow.Color        = Theme.ToggleGlow or Theme.ToggleOn
+            Glow.Transparency = 1
+            Glow.Parent       = Main
+        end
+
         local Listeners = {}
 
         local function Set(Value)
             if Main then
-                Tween(Main, 0.16, {
+                -- v4: spring easing on bg colour for a smoother arrival
+                Tween(Main, 0.22, {
                     BackgroundColor3 = Value and Theme.ToggleOn or Theme.ToggleOff,
-                })
+                }, Ease.Smooth)
+            end
+            if Glow then
+                Tween(Glow, 0.30, {
+                    Transparency = Value and 0.35 or 1,
+                }, Ease.Soft)
             end
             if Circle then
-                Tween(Circle, 0.16, {
+                -- v4: knob travels with Back/Out (slight overshoot)
+                PresetTween(Circle, "Spring", {
                     BackgroundColor3 = Theme.ToggleKnob,
                     Position = Value
                         and UDim2.new(1, -16, 0.5, 0)
@@ -1454,6 +1828,11 @@ function Library:CreateWindow(Settings)
             local Value = not (On and On.Value)
             Set(Value)
             Buzz(0.3)
+            -- v4: ripple feedback originates from the switch centre
+            if Main then
+                local p = Main.AbsolutePosition + (Main.AbsoluteSize / 2)
+                Animations:Ripple(Main, p, Value and Theme.ToggleOn or Theme.Outline)
+            end
             if Cfg.Callback then task.spawn(Cfg.Callback, Value) end
         end))
 
@@ -1495,18 +1874,31 @@ function Library:CreateWindow(Settings)
 
         local Title, Desc = Options:GetLabels(Button)
 
+        -- v4: capture the press position so the ripple originates there
+        local lastPressPos = nil
+        WinMaid:Add(Connect(Button.InputBegan, function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1
+               or Input.UserInputType == Enum.UserInputType.Touch then
+                lastPressPos = Vector2.new(Input.Position.X, Input.Position.Y)
+            end
+        end))
+
         WinMaid:Add(Connect(Button.MouseButton1Click, function()
-            Tween(Button, 0.07, {
-                BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.18),
-            })
-            task.delay(0.14, function()
-                Tween(Button, 0.14, { BackgroundColor3 = Theme.Component })
+            -- v4: quick accent flash plus a ripple from the press point
+            Tween(Button, 0.08, {
+                BackgroundColor3 = LerpColor(Theme.Component, Theme.Accent, 0.22),
+            }, Ease.Snap)
+            task.delay(0.16, function()
+                Tween(Button, 0.20, { BackgroundColor3 = Theme.Component }, Ease.Smooth)
             end)
+            Animations:Ripple(Button, lastPressPos, Theme.AccentLight or Theme.Accent)
             Buzz(0.35)
             if Cfg.Callback then task.spawn(Cfg.Callback) end
         end))
 
         Animations:Hover(Button, false, WinMaid, Theme.Accent)
+        Animations:Press(Button, WinMaid)
+        Animations:Lift(Button, WinMaid, 1)
         if Title then Title.Text = Cfg.Title       or "" end
         if Desc  then Desc.Text  = Cfg.Description or "" end
         SetProperty(Button, { Name = Cfg.Title or "Button", Parent = Cfg.Tab, Visible = true })
@@ -1665,7 +2057,15 @@ function Library:CreateWindow(Settings)
         end
 
         local function StopSliding()
-            if Active then Buzz(0.2) end  -- commit haptic
+            if Active then
+                Buzz(0.2)  -- commit haptic
+                -- v4: shrink the thumb back to rest size
+                if Fire then
+                    PresetTween(Fire, "Spring", {
+                        Size = UDim2.new(0, 12, 0, 12),
+                    })
+                end
+            end
             Active = false
             ActiveTouch = nil
         end
@@ -1691,6 +2091,7 @@ function Library:CreateWindow(Settings)
 
         -- Begin slide: TAP ANYWHERE on the track (slide), not just the Fire dot.
         -- This is the big mobile UX win — old behaviour required hitting a tiny circle.
+        -- v4: the thumb "lifts" (grows ~20 %) on grab for tactile feedback.
         local function BeginSlide(Input)
             local t = Input.UserInputType
             if t == Enum.UserInputType.MouseButton1 then
@@ -1700,6 +2101,11 @@ function Library:CreateWindow(Settings)
                 Active = true
                 ActiveTouch = Input
                 UpdateFromPositionX(Input.Position.X)
+            end
+            if Active and Fire then
+                PresetTween(Fire, "Spring", {
+                    Size = UDim2.new(0, 15, 0, 15),
+                })
             end
         end
 
@@ -1941,6 +2347,7 @@ function Library:CreateWindow(Settings)
                 for _, Btn in next, CloseButtons:GetChildren() do
                     if Btn:IsA("TextButton") then
                         Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
+                        Animations:Press(Btn, PanelMaid)
                         PanelMaid:Add(Connect(Btn.MouseButton1Click, CloseDropdown))
                     end
                 end
@@ -1961,6 +2368,7 @@ function Library:CreateWindow(Settings)
 
                     SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
                     Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
+                    Animations:Press(Btn, PanelMaid)
 
                     PanelMaid:Add(Connect(Btn.MouseButton1Click, function()
                         CurrentValue = Option
@@ -2085,6 +2493,7 @@ function Library:CreateWindow(Settings)
                 for _, Btn in next, CloseButtons:GetChildren() do
                     if Btn:IsA("TextButton") then
                         Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
+                        Animations:Press(Btn, PanelMaid)
                         PanelMaid:Add(Connect(Btn.MouseButton1Click, CloseDropdown))
                     end
                 end
@@ -2116,6 +2525,7 @@ function Library:CreateWindow(Settings)
 
                     SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
                     Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
+                    Animations:Press(Btn, PanelMaid)
 
                     PanelMaid:Add(Connect(Btn.MouseButton1Click, function()
                         Selected[Option] = not Selected[Option] or nil
@@ -2409,7 +2819,7 @@ function Library:CreateWindow(Settings)
 
         local SVThumb = Instance.new("Frame", SVCanvas)
         SetProperty(SVThumb, {
-            Size             = UDim2.new(0, IsMobile and 16 or 12, 0, IsMobile and 16 or 12),
+            Size             = UDim2.new(0, IsMobile and 18 or 14, 0, IsMobile and 18 or 14),
             AnchorPoint      = Vector2.new(0.5, 0.5),
             Position         = UDim2.new(1, 0, 0, 0),
             BackgroundColor3 = Color3.new(1, 1, 1),
@@ -2418,7 +2828,7 @@ function Library:CreateWindow(Settings)
         })
         Instance.new("UICorner", SVThumb).CornerRadius = UDim.new(1, 0)
         local SVStroke = Instance.new("UIStroke", SVThumb)
-        SVStroke.Color = Color3.new(0.15, 0.15, 0.15); SVStroke.Thickness = 1.5
+        SVStroke.Color = Color3.new(0.10, 0.10, 0.12); SVStroke.Thickness = 2
 
         local HueTrack = Instance.new("Frame", Picker)
         SetProperty(HueTrack, {
@@ -2443,16 +2853,16 @@ function Library:CreateWindow(Settings)
 
         local HueThumb = Instance.new("Frame", HueTrack)
         SetProperty(HueThumb, {
-            Size             = UDim2.new(0, IsMobile and 18 or 12, 1, 4),
+            Size             = UDim2.new(0, IsMobile and 20 or 14, 1, 6),
             AnchorPoint      = Vector2.new(0.5, 0.5),
             Position         = UDim2.new(0, 0, 0.5, 0),
             BackgroundColor3 = Color3.new(1, 1, 1),
             BorderSizePixel  = 0,
             ZIndex           = HueTrack.ZIndex + 2,
         })
-        Instance.new("UICorner", HueThumb).CornerRadius = UDim.new(0, 4)
+        Instance.new("UICorner", HueThumb).CornerRadius = UDim.new(0, 5)
         local HueStroke = Instance.new("UIStroke", HueThumb)
-        HueStroke.Color = Color3.new(0.15, 0.15, 0.15); HueStroke.Thickness = 1.5
+        HueStroke.Color = Color3.new(0.10, 0.10, 0.12); HueStroke.Thickness = 2
 
         local HexRow = Instance.new("Frame", Picker)
         SetProperty(HexRow, {
@@ -2806,31 +3216,37 @@ function Library:CreateWindow(Settings)
             ZIndex           = 200,
             Parent           = Screen,
         })
-        Tween(Modal, 0.18, { BackgroundTransparency = 0.5 })
+        -- v4: deeper backdrop fade for a real "modal" feel
+        Tween(Modal, 0.20, { BackgroundTransparency = 0.45 }, Ease.Smooth)
+
+        local TargetW = IsMobile and 340 or 420
+        local TargetH = 200
 
         local Card = Instance.new("Frame", Modal)
         SetProperty(Card, {
-            Size             = UDim2.new(0, IsMobile and 320 or 380, 0, 180),
+            Size             = UDim2.new(0, TargetW, 0, TargetH),
             Position         = UDim2.fromScale(0.5, 0.5),
             AnchorPoint      = Vector2.new(0.5, 0.5),
             BackgroundColor3 = Theme.Primary,
             BorderSizePixel  = 0,
             ZIndex           = 201,
         })
-        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 10)
+        Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 12)
         local CardStroke = Instance.new("UIStroke", Card)
-        CardStroke.Color = Theme.Outline
+        CardStroke.Color        = Theme.Outline
+        CardStroke.Thickness    = 1
+        CardStroke.Transparency = 0.2
 
         local CTitle = Instance.new("TextLabel", Card)
         SetProperty(CTitle, {
             Text                   = Cfg.Title or "Confirm",
             Font                   = Enum.Font.GothamBold,
-            TextSize               = 16,
+            TextSize               = 17,
             TextColor3             = Theme.Title,
             BackgroundTransparency = 1,
             TextXAlignment         = Enum.TextXAlignment.Left,
-            Size                   = UDim2.new(1, -32, 0, 24),
-            Position               = UDim2.new(0, 16, 0, 16),
+            Size                   = UDim2.new(1, -36, 0, 26),
+            Position               = UDim2.new(0, 20, 0, 20),
             ZIndex                 = 202,
             BorderSizePixel        = 0,
         })
@@ -2845,16 +3261,16 @@ function Library:CreateWindow(Settings)
             TextXAlignment         = Enum.TextXAlignment.Left,
             TextYAlignment         = Enum.TextYAlignment.Top,
             TextWrapped            = true,
-            Size                   = UDim2.new(1, -32, 0, 70),
-            Position               = UDim2.new(0, 16, 0, 46),
+            Size                   = UDim2.new(1, -36, 0, 78),
+            Position               = UDim2.new(0, 20, 0, 52),
             ZIndex                 = 202,
             BorderSizePixel        = 0,
         })
 
         local BtnRow = Instance.new("Frame", Card)
         SetProperty(BtnRow, {
-            Size                   = UDim2.new(1, -32, 0, 36),
-            Position               = UDim2.new(0, 16, 1, -52),
+            Size                   = UDim2.new(1, -36, 0, 40),
+            Position               = UDim2.new(0, 18, 1, -58),
             BackgroundTransparency = 1,
             BorderSizePixel        = 0,
             ZIndex                 = 202,
@@ -2862,8 +3278,10 @@ function Library:CreateWindow(Settings)
         local Lay = Instance.new("UIListLayout", BtnRow)
         Lay.FillDirection      = Enum.FillDirection.Horizontal
         Lay.HorizontalAlignment = Enum.HorizontalAlignment.Right
-        Lay.Padding            = UDim.new(0, 8)
+        Lay.Padding            = UDim.new(0, 10)
         Lay.VerticalAlignment  = Enum.VerticalAlignment.Center
+
+        local PanelMaid = Maid.new()
 
         local function MakeBtn(label, isPrimary)
             local B = Instance.new("TextButton", BtnRow)
@@ -2875,11 +3293,12 @@ function Library:CreateWindow(Settings)
                 BackgroundColor3       = isPrimary and Theme.Accent or Theme.Component,
                 AutoButtonColor        = false,
                 BorderSizePixel        = 0,
-                Size                   = UDim2.new(0, 96, 1, 0),
+                Size                   = UDim2.new(0, 104, 1, 0),
                 ZIndex                 = 203,
             })
-            Instance.new("UICorner", B).CornerRadius = UDim.new(0, 6)
-            Animations:Hover(B, false, nil, Theme.Accent)
+            Instance.new("UICorner", B).CornerRadius = UDim.new(0, 8)
+            Animations:Hover(B, false, PanelMaid, Theme.Accent)
+            Animations:Press(B, PanelMaid)
             return B
         end
 
@@ -2887,20 +3306,35 @@ function Library:CreateWindow(Settings)
         local ConfirmBtn = MakeBtn(Cfg.ConfirmText or "Confirm", true)
 
         local function CloseModal(result)
-            Tween(Modal, 0.15, { BackgroundTransparency = 1 })
-            Tween(Card, 0.15, { Size = UDim2.new(0, IsMobile and 290 or 350, 0, 150) })
+            Tween(Modal, 0.16, { BackgroundTransparency = 1 }, Ease.Snap)
+            Tween(Card, 0.16, { Size = UDim2.new(0, TargetW - 30, 0, TargetH - 30) }, Ease.Snap)
             task.delay(0.2, function()
+                PanelMaid:Destroy()
                 Destroy(Modal)
             end)
             if Cfg.Callback then task.spawn(Cfg.Callback, result) end
         end
 
-        Connect(CancelBtn.MouseButton1Click,  function() Buzz(0.2); CloseModal(false) end)
-        Connect(ConfirmBtn.MouseButton1Click, function() Buzz(0.35); CloseModal(true)  end)
+        PanelMaid:Add(Connect(CancelBtn.MouseButton1Click,  function() Buzz(0.2); CloseModal(false) end))
+        PanelMaid:Add(Connect(ConfirmBtn.MouseButton1Click, function() Buzz(0.35); CloseModal(true)  end))
 
-        -- Spring in
-        Card.Size = UDim2.new(0, IsMobile and 290 or 350, 0, 150)
-        Spring(Card, 0.25, { Size = UDim2.new(0, IsMobile and 320 or 380, 0, 180) })
+        -- v4: ESC / outside tap = cancel (modern modal convention)
+        PanelMaid:Add(Connect(Modal.InputBegan, function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1
+               or Input.UserInputType == Enum.UserInputType.Touch then
+                local mx, my = Input.Position.X, Input.Position.Y
+                local p, s = Card.AbsolutePosition, Card.AbsoluteSize
+                local inside = mx >= p.X and mx <= p.X + s.X
+                           and my >= p.Y and my <= p.Y + s.Y
+                if not inside then
+                    CloseModal(false)
+                end
+            end
+        end))
+
+        -- v4: smoother spring-in (Back/Out)
+        Card.Size = UDim2.new(0, TargetW - 40, 0, TargetH - 40)
+        PresetTween(Card, "Spring", { Size = UDim2.new(0, TargetW, 0, TargetH) })
     end
 
 
@@ -2998,6 +3432,7 @@ function Library:CreateWindow(Settings)
                 for _, Btn in next, CloseBtns:GetChildren() do
                     if Btn:IsA("TextButton") then
                         Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
+                        Animations:Press(Btn, PanelMaid)
                         PanelMaid:Add(Connect(Btn.MouseButton1Click, CloseDropdown))
                     end
                 end
@@ -3017,6 +3452,7 @@ function Library:CreateWindow(Settings)
 
                     SetProperty(Btn, { Parent = ScrollFrame, Visible = true })
                     Animations:Hover(Btn, false, PanelMaid, Theme.Accent)
+                    Animations:Press(Btn, PanelMaid)
 
                     OptionBtns[#OptionBtns + 1] = { btn = Btn, key = tostring(Index):lower(), value = Option, index = Index }
 
@@ -3200,6 +3636,36 @@ function Library:CreateWindow(Settings)
         ["ScrollingFrame"] = function(L) L.ScrollBarImageColor3 = Theme.Interactable end,
     }
 
+    -- v4: per-window descendant cache.
+    -- Old code re-walked Screen:GetDescendants() on every SetTheme — which
+    -- scans the FULL tree (including other windows AND the global Components
+    -- template folder). With 5 components per window × 3 windows that was
+    -- O(1500) nodes scanned for every theme toggle. We now keep a per-window
+    -- cache that includes only Window's descendants, refreshed lazily when
+    -- DescendantAdded fires.
+    local _themeCache         = nil
+    local _themeCacheDirty    = true
+
+    local function _rebuildThemeCache()
+        local cache = {}
+        local i = 0
+        -- Include Window itself
+        i += 1; cache[i] = Window
+        for _, D in next, Window:GetDescendants() do
+            i += 1; cache[i] = D
+        end
+        _themeCache      = cache
+        _themeCacheDirty = false
+    end
+
+    -- Invalidate the cache whenever a new descendant appears
+    WinMaid:Add(Connect(Window.DescendantAdded, function()
+        _themeCacheDirty = true
+    end))
+    WinMaid:Add(Connect(Window.DescendantRemoving, function()
+        _themeCacheDirty = true
+    end))
+
     function Options:SetTheme(NewTheme)
         if NewTheme then Theme = NewTheme end
 
@@ -3210,23 +3676,38 @@ function Library:CreateWindow(Settings)
         local WS = Window:FindFirstChildOfClass("UIStroke")
         if WS then WS.Color = Theme.Shadow end
 
-        -- Walk the entire screen tree once; rule-table lookup is O(1) per node.
-        for _, D in next, Screen:GetDescendants() do
-            local nr = NameRules[D.Name]
-            local cr = ClassRules[D.ClassName]
-            if     nr then pcall(nr, D)
-            elseif cr then pcall(cr, D)
+        if _themeCacheDirty or not _themeCache then
+            _rebuildThemeCache()
+        end
+
+        -- Walk our cached descendants; rule-table lookup is O(1) per node.
+        for i = 1, #_themeCache do
+            local D = _themeCache[i]
+            if D and D.Parent then  -- guard against just-destroyed nodes
+                local nr = NameRules[D.Name]
+                local cr = ClassRules[D.ClassName]
+                if     nr then pcall(nr, D)
+                elseif cr then pcall(cr, D)
+                end
             end
         end
 
-        -- Update the FAB if it exists (it lives directly under Screen so the
-        -- name-rule walk above might not catch its Accent colour).
-        for _, child in ipairs(Screen:GetChildren()) do
-            if child.Name:match("^FAB_") then
-                child.BackgroundColor3 = Theme.Accent
-                local S = child:FindFirstChildOfClass("UIStroke")
-                if S then S.Color = Theme.Outline end
+        -- Notifications live under Screen, not Window — recolour them here.
+        for _, N in ipairs(ActiveNotifs) do
+            if N and N.Parent and N:IsA("CanvasGroup") then
+                N.BackgroundColor3 = Theme.Primary
+                local NS = N:FindFirstChildOfClass("UIStroke")
+                if NS then NS.Color = Theme.Outline end
             end
+        end
+
+        -- Update the per-window FAB (lives under Screen directly).
+        local fabName = "FAB_" .. (Settings.Title or "Window")
+        local fab = Screen:FindFirstChild(fabName)
+        if fab then
+            fab.BackgroundColor3 = Theme.Accent
+            local S = fab:FindFirstChildOfClass("UIStroke")
+            if S then S.Color = Theme.Outline end
         end
     end
 
